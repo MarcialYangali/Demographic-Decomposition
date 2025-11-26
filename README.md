@@ -1,2 +1,2 @@
 # Demographic-Decomposition
-Descomposición usando Kitagawa,.Horiuchi y DasGupta
+Descomposición usando Kitagawa (1955),Horiuchi (2018) y DasGupta (?)
