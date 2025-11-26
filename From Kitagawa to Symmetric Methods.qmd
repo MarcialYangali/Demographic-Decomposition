@@ -56,9 +56,9 @@ pacman::p_load(
     janitor, dplyr,
     tidyr, tidyverse,
     purrr, # easy iterations
-    scales, # ??? comentar uso
-    knitr, # ??? comentar uso
-    gt,# ??? comentar uso
+    scales, # Format numbers in graphics
+    knitr, # Integrate code and narrative inside documents
+    gt,#  Produce professional-quality tables
     
     # Data Viz
     ggplot2, patchwork,
@@ -71,47 +71,47 @@ pacman::p_load(
 
 ### Kitagawa generalizada
 
-Sea $x$ el índice que recorre las categorías de estratificación de cualquier variable estructural relevante: edades, niveles educativos, grupos socioeconómicos, tipos de hogares, regiones de residencia, etc.
+Let $x$ index the stratification categories of any structurally relevant variable—age groups, educational levels, socioeconomic strata, household types, regions of residence, and so on.
 
-Denotemos por $G$ cualquier población o grupo cuya tasa global queremos comparar.
+Let $G$ denote ny population or group for which we aim to compute and compare an aggregate rate.
 
-Para cada combinación $(G, x)$, definimos:
+For each $(G, x)$pair, we define:
 
-1.  Tamaño del estrato
+1.  Size of the stratum
 
-$$\eta_x^{(G)} : \text{número total de unidades en la categoría estructural } x \text{ dentro del grupo } G.$$
+$$\eta_x^{(G)} : \text{total number of units in structural category } x \text{ within group } G.$$
 
-2\. Estructura o peso relativo del estrato
+2.  Structural weight of the stratum
 
 $$s_x^{(G)} = \frac{\eta_x^{(G)}}{\sum_x \eta_x^{(G)}}.$$
 
-3\. Tasa específica del estrato
+3.  Stratum-specific rate
 
-$$r_x^{(G)} : \text{tasa, proporción o intensidad correspondiente al estrato } x.$$
+$$r_x^{(G)} : \text{rate, proportion, or intensity associated with stratum } x.$$
 
-La tasa global del grupo $G$ es siempre una media ponderada:
+The overall rate of group $G$ is always a weighted average:
 
 $$R^{(G)} = \sum_x s_x^{(G)} \, r_x^{(G)}.$$
 
-Comparación entre dos poblaciones
+Comparison between two populations
 
-Sea $A$ y $B$ dos grupos cualesquiera. La diferencia total en las tasas globales es:
+Let $A$ and $B$ be any two groups. The total difference in overall rates is:
 
 $$\Delta R = R^{(A)} - R^{(B)}.$$
 
-El método clásico de **Kitagawa (1955)** separa exactamente estas dos fuentes de variación mediante una descomposición aditiva y simétrica:
+The classical **Kitagawa (1955)** method separates these two sources of variation through an additive and symmetric decomposition:
 
 $$\Delta R = \sum_x \left(r_x^{(A)} - r_x^{(B)}\right) \frac{s_x^{(A)} + s_x^{(B)}}{2} + \sum_x \left(s_x^{(A)} - s_x^{(B)}\right) \frac{r_x^{(A)} + r_x^{(B)}}{2}.$$
 
-$$\underbrace{\sum_x \left(r_x^{(A)} - r_x^{(B)}\right) \frac{s_x^{(A)} + s_x^{(B)}}{2}}_{\text{Rate Effect (RE)}} + \underbrace{\sum_x \left(s_x^{(A)} - s_x^{(B)}\right) \frac{r_x^{(A)} + r_x^{(B)}}{2}}_{\text{Composition Effect (CE)}}$$
+$$\underbrace{\sum_x \left(r_x^{(A)} - r_x^{(B)}\right) \frac{s_x^{(A)} + s_x^{(B)}}{2}}_{\text{Rate Effect (RE)}} + \underbrace{\sum_x \left(s_x^{(A)} - s_x^{(B)}\right) \frac{r_x^{(A)} + r_x^{(B)}}{2}}_{\text{Composition Effect (CE)}}.$$
 
-Esta diferencia puede deberse a:
+This total difference may arise from:
 
-1.  cambios en las **tasas específicas**, captura cuánto de la diferencia total se debe a variación en las tasas específicas entre estratos, manteniendo fija la estructura. Es la parte “pura” del cambio en el riesgo o la intensidad del evento de interés.
+1.  changes in the **stratum-specific rates**, capturing how much of the total difference is due to variation in the specific rates across strata while holding the structure fixed. This is the “pure” component reflecting changes in the risk or intensity of the outcome of interest.
 
-2.  cambios en la **composición estructural**, mide la porción explicada por diferencias en la estructura del grupo (edad, educación, región, lo que sea). Su interpretación genérica es:\
+2.  changes in the **structural composition**, measuring the portion explained by differences in the group’s structure (age, education, region, etc.). Its generic interpretation is:
 
-    *“¿Cuánto cambiaría la tasa global si los grupos tuvieran la misma estructura, pero conservaran sus propias tasas específicas?”*
+    *“How much would the overall rate change if the groups shared the same structural composition but kept their own stratum-specific rates?”*
 
 ### Función genérica
 
@@ -1571,6 +1571,299 @@ group_by(region, component, discapacidad) |>
     labs(y = NULL, x = "Contribution (%)")+
     theme(legend.position = "bottom")
 ```
+
+### Extension of Kitagawa
+
+Given that the interaction between age and disability cannot be uniquely assigned to each structural component, we construct a symmetric version of the Kitagawa decomposition. To do this, we consider two alternative parameterizations of the joint age–disability structure and average the contributions obtained from both. This ensures that the decomposition remains exact (the components sum to the observed difference) and is less dependent on the arbitrary choice of factor ordering.
+
+Let:
+
+-   $a$: age category
+-   $z \in \{0, 1\}$: disability status
+-   $G$: group or region
+
+We denote:
+
+-   $s_a^{(G)}$: proportion of the population at age $a$
+-   $p_{z|a}^{(G)}$: proportion of individuals in state $z$ *within* age $a$
+-   $h_{a,z}^{(G)}$: proportion of person-days exposed to extreme heat in subgroup $(a, z, G)$
+
+The joint rate is defined as:
+
+$$
+R^{(G)} = \sum_a \sum_z s_a^{(G)} \, p_{z|a}^{(G)} \, h_{a,z}^{(G)}.
+\qquad(1)
+$$
+
+This is the exposure measure simultaneously weighted by age and disability.
+
+The joint structure is defined as:
+
+$$
+\omega_{a,z}^{(G)} = s_a^{(G)} \, p_{z|a}^{(G)},
+\qquad(2)
+$$
+
+and then the rate in (1) can be written as:
+
+$$
+R^{(G)} = \sum_{a,z} \omega_{a,z}^{(G)} \, h_{a,z}^{(G)}.
+\qquad(3)
+$$
+
+We want to compare two regions $A$ and $B$:
+
+$$
+\Delta R = R^{(A)} - R^{(B)}.
+$$
+
+Applying Kitagawa to representation (3):
+
+$$
+\Delta R = \sum_{a,z} \left(h_{a,z}^{(A)} - h_{a,z}^{(B)}\right) \frac{\omega_{a,z}^{(A)} + \omega_{a,z}^{(B)}}{2} + \sum_{a,z} \left(\omega_{a,z}^{(A)} - \omega_{a,z}^{(B)}\right) \frac{h_{a,z}^{(A)} + h_{a,z}^{(B)}}{2}.
+\qquad(4)
+$$
+
+$$
+\underbrace{\hspace{5cm}}_{\text{Heat-rate effect } (RE_h)} \quad \underbrace{\hspace{5cm}}_{\text{Joint composition effect } (CE_\omega)}
+$$
+
+This separates:
+
+-   changes in **heat intensity** $\rightarrow RE_h$
+-   changes in **joint age–disability structure** $\rightarrow CE_\omega$
+
+Since
+
+$$
+\omega_{a,z}^{(G)} = s_a^{(G)} \, p_{z|a}^{(G)},
+$$
+
+we can apply Kitagawa again to the product $s \cdot p$.
+
+The difference in the joint structure can be written as:
+
+$$
+\Delta\omega_{a,z} = \left(s_a^{(A)} - s_a^{(B)}\right) \frac{p_{z|a}^{(A)} + p_{z|a}^{(B)}}{2} + \left(p_{z|a}^{(A)} - p_{z|a}^{(B)}\right) \frac{s_a^{(A)} + s_a^{(B)}}{2}.
+\qquad(5)
+$$
+
+Substituting (5) into $CE_\omega$, we obtain:
+
+Age composition effect
+
+$$
+CE_s = \sum_{a,z} \left(s_a^{(A)} - s_a^{(B)}\right) \frac{p_{z|a}^{(A)} + p_{z|a}^{(B)}}{2} \cdot \frac{h_{a,z}^{(A)} + h_{a,z}^{(B)}}{2}.
+\qquad(6)
+$$
+
+Disability composition effect
+
+$$
+CE_d = \sum_{a,z} \left(p_{z|a}^{(A)} - p_{z|a}^{(B)}\right) \frac{s_a^{(A)} + s_a^{(B)}}{2} \cdot \frac{h_{a,z}^{(A)} + h_{a,z}^{(B)}}{2}.
+\qquad(7)
+$$
+
+Thus, we obtain:
+
+$$
+\boxed{\Delta R = RE_h + CE_s + CE_d.}
+\qquad(8)
+$$
+
+Since
+
+$$
+\omega = s \cdot p_{z|a},
+$$
+
+we can rewrite:
+
+-   marginal prevalence of disability:
+
+$$
+q_z^{(G)} = \frac{N_z^{(G)}}{N^{(G)}}
+$$
+
+-   age structure within each disability status:
+
+$$
+s_{a|z}^{(G)} = \frac{N_{a,z}^{(G)}}{N_z^{(G)}}
+$$
+
+Then the joint structure can also be written as:
+
+$$
+\omega_{a,z}^{(G)} = q_z^{(G)} \, s_{a|z}^{(G)}.
+\qquad(9)
+$$
+
+Applying Kitagawa to this form yields a second decomposition:
+
+$$
+\Delta R = RE_h + CE_q + CE_{s|z}.
+\qquad(10)
+$$
+
+where:
+
+-   $CE_q$: effect of having more/fewer people with disabilities
+-   $CE_{s|z}$: differences in age *within each* disability category
+
+Given that the age–disability interaction cannot be uniquely allocated (as is well known in decomposition theory), we can define a symmetric version:
+
+$$
+RE_h^* = \frac{RE_h^{(A\rightarrow B)} + RE_h^{(B\rightarrow A)}}{2} \approx RE_h
+$$
+
+$$
+CE_{\text{age}}^* = \frac{CE_s + CE_{s|z}}{2},
+$$
+
+$$
+CE_{\text{dis}}^* = \frac{CE_d + CE_q}{2}.
+$$
+
+And we still preserve:
+
+$$
+\Delta R = RE_h^* + CE_{\text{age}}^* + CE_{\text{dis}}^*.
+\qquad(11)
+$$
+
+
+```{r}
+# Construction of joint structures (ω)
+# compute p(z|a)
+compute_p_given_a <- function(df, age_col, dis_col, pop_col){
+  df |>
+    group_by(.data[[age_col]]) |>
+    mutate(
+      p = .data[[pop_col]] / sum(.data[[pop_col]], na.rm = TRUE)
+    ) |>
+    ungroup()
+}
+
+# marginal disability prevalence q(z)
+compute_q <- function(df, dis_col, pop_col){
+  df |>
+    mutate(total_pop = sum(.data[[pop_col]], na.rm = TRUE)) |>
+    group_by(.data[[dis_col]]) |>
+    mutate(
+      q = sum(.data[[pop_col]], na.rm = TRUE) / total_pop
+    ) |>
+    ungroup() |>
+    select(-total_pop)
+}
+
+# compute s(a|z)
+compute_s_given_z <- function(df, age_col, dis_col, pop_col){
+  df |>
+    group_by(.data[[dis_col]]) |>
+    mutate(
+      s_cond = .data[[pop_col]] / sum(.data[[pop_col]], na.rm = TRUE)
+    ) |>
+    ungroup()
+}
+
+# create joint structure w^{1} = s_a * p_{z|a}
+structure_A <- function(df){
+  df |> mutate(w = s * p)
+}
+
+# create joint structure w^{2} = q_z * s_{a|z}
+structure_B <- function(df){
+  df |> mutate(w = q * s_cond)
+}
+
+# wrapper for building the chosen joint structure
+build_structure <- function(df, version = c("A","B")){
+  version <- match.arg(version)
+  if(version == "A"){
+    df <- structure_A(df)
+  } else {
+    df <- structure_B(df)
+  }
+  return(df)
+}
+
+```
+
+```{r}
+# Expand disability categories into long format
+df_long <- df |> 
+  mutate(popnodis = pop - popdis) |> 
+  select(-pop) |> 
+  pivot_longer(
+    cols = c("popnodis","dis_mov","dis_mult","dis_otros"),
+    names_to = "dis",
+    values_to = "pop"
+  )
+
+# Sum population and person-days by region/age/disability
+datos_base <- df_long |> 
+  group_by(region, age5, dis) |> 
+  summarise(
+    S = sum(pop, na.rm = TRUE),
+    H = sum(pop * heatdays, na.rm = TRUE)
+  ) |> 
+  ungroup()
+
+# Age structure (marginal)
+datos_base <- datos_base |> 
+  group_by(region, age5) |> 
+  mutate(
+    s = S / sum(S, na.rm = TRUE)
+  ) |> 
+  ungroup()
+
+# Heat-specific rate h(a, z)
+datos_base <- datos_base |> 
+  mutate(
+    h = H / S
+  )
+
+datos_base <- datos_base |> 
+  rename(pop = S)
+
+# p(z|a)
+datos_base <- compute_p_given_a(
+  df       = datos_base,
+  age_col  = "age5",
+  dis_col  = "dis",
+  pop_col  = "pop"
+)
+
+# q(z)
+datos_base <- compute_q(
+  df       = datos_base,
+  dis_col  = "dis",
+  pop_col  = "pop"
+)
+
+# s(a|z)
+datos_base <- compute_s_given_z(
+  df       = datos_base,
+  age_col  = "age5",
+  dis_col  = "dis",
+  pop_col  = "pop"
+)
+
+# Joint structure version A: w_A = s * p
+datos_A <- build_structure(datos_base, version = "A")
+
+# Joint structure version B: w_B = q * s_cond
+datos_B <- build_structure(datos_base, version = "B")
+
+# Validation
+message("Joint structures successfully constructed:")
+print(names(datos_A))
+print(names(datos_B))
+
+```
+
+
+
 
 # Gráficas \[Anterior\]
 
