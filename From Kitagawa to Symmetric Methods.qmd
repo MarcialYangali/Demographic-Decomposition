@@ -1801,7 +1801,7 @@ df_long <- df |>
   )
 
 # Sum population and person-days by region/age/disability
-datos_base <- df_long |> 
+data_base <- df_long |> 
   group_by(region, age5, dis) |> 
   summarise(
     S = sum(pop, na.rm = TRUE),
@@ -1810,7 +1810,7 @@ datos_base <- df_long |>
   ungroup()
 
 # Age structure (marginal)
-datos_base <- datos_base |> 
+data_base <- data_base |> 
   group_by(region, age5) |> 
   mutate(
     s = S / sum(S, na.rm = TRUE)
@@ -1818,47 +1818,47 @@ datos_base <- datos_base |>
   ungroup()
 
 # Heat-specific rate h(a, z)
-datos_base <- datos_base |> 
+data_base <- data_base |> 
   mutate(
     h = H / S
   )
 
-datos_base <- datos_base |> 
+data_base <- data_base |> 
   rename(pop = S)
 
 # p(z|a)
-datos_base <- compute_p_given_a(
-  df       = datos_base,
+data_base <- compute_p_given_a(
+  df       = data_base,
   age_col  = "age5",
   dis_col  = "dis",
   pop_col  = "pop"
 )
 
 # q(z)
-datos_base <- compute_q(
-  df       = datos_base,
+data_base <- compute_q(
+  df       = data_base,
   dis_col  = "dis",
   pop_col  = "pop"
 )
 
 # s(a|z)
-datos_base <- compute_s_given_z(
-  df       = datos_base,
+data_base <- compute_s_given_z(
+  df       = data_base,
   age_col  = "age5",
   dis_col  = "dis",
   pop_col  = "pop"
 )
 
 # Joint structure version A: w_A = s * p
-datos_A <- build_structure(datos_base, version = "A")
+data_A <- build_structure(data_base, version = "A")
 
 # Joint structure version B: w_B = q * s_cond
-datos_B <- build_structure(datos_base, version = "B")
+data_B <- build_structure(data_base, version = "B")
 
 # Validation
 message("Joint structures successfully constructed:")
-print(names(datos_A))
-print(names(datos_B))
+print(names(data_A))
+print(names(data_B))
 
 ```
 
