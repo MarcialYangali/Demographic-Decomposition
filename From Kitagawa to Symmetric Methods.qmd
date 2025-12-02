@@ -1608,29 +1608,81 @@ results_rg <- purrr::map_dfr(
 ```
 
 ```{r}
-results_rg|> 
+#| label: Orden por región
+norte <- c(
+  "Baja California", "Baja California Sur", "Sonora", "Chihuahua",
+  "Coahuila", "Nuevo León", "Tamaulipas", "Durango"
+)
+
+centro <- c(
+  "Aguascalientes", "Zacatecas", "San Luis Potosí", "Guanajuato",
+  "Querétaro", "Hidalgo", "Estado de México", "Ciudad de México",
+  "Morelos", "Tlaxcala", "Puebla", "Michoacán", "Jalisco"
+)
+
+sur <- c(
+  "Colima", "Nayarit", "Sinaloa", "Veracruz", "Guerrero",
+  "Oaxaca", "Chiapas", "Tabasco", "Campeche", "Yucatán", "Quintana Roo"
+)
+
+orden_estados <- c(norte, centro, sur)
+
+results_rg <- results_rg |>
+  dplyr::mutate(
+    exposure_rate = R_cmp   
+  )
+
+results_rg <- results_rg |> 
+  dplyr::mutate(
+    macroregion = dplyr::case_when(
+      region %in% norte ~ "Norte",
+      region %in% centro ~ "Centro",
+      region %in% sur ~ "Sur",
+      TRUE ~ NA_character_
+    )
+  )
+
+orden_estados <- c(norte, centro, sur)
+
+
+results_rg <- results_rg |> 
+  dplyr::mutate(
+    region = factor(region, levels = orden_estados),
+    macroregion = factor(macroregion, levels = c("Norte","Centro","Sur"))
+  ) |> 
+  dplyr::arrange(macroregion, region)
+
+
+```
+
+```{r}
+#| label: Tabla Das Gupta
+results_rg |> 
   dplyr::select(
+    macroregion,       
     region,
+    exposure_rate,
     effect_heat,
     effect_age,
     effect_disability,
     total_diff
   ) |> 
-  dplyr::arrange(desc(abs(total_diff))) |> 
   gt() |> 
   tab_header(
     title = "Das Gupta decomposition",
-    subtitle = "Differences in extreme heat exposure "
+    subtitle = "Differences in extreme heat exposure"
   ) |> 
   cols_label(
-    region = "Region",
+    macroregion = "Region",
+    region = "State",
+    exposure_rate = "Exposure rate",
     effect_heat = "Heat effect",
     effect_age = "Age effect",
     effect_disability = "Disability effect",
     total_diff = "Total difference"
   ) |> 
   fmt_number(
-    columns = c(effect_heat, effect_age, effect_disability, total_diff),
+    columns = c(exposure_rate, effect_heat, effect_age, effect_disability, total_diff),
     decimals = 6
   ) |> 
   data_color(
@@ -1651,11 +1703,148 @@ results_rg|>
   )
 ```
 
+
+
+```{r}
+#| label: Tabla Das Gupa
+# library(htmltools)
+# 
+# # Preparar datos con indicadores de grupo
+# results_rg_tabla <- results_rg |> 
+#   dplyr::select(
+#     macroregion,
+#     region,
+#     exposure_rate,
+#     effect_heat,
+#     effect_age,
+#     effect_disability,
+#     total_diff
+#   ) |>
+#   dplyr::group_by(macroregion) |>
+#   dplyr::mutate(
+#     primera_fila = dplyr::row_number() == 1,
+#     n_filas = dplyr::n()
+#   ) |>
+#   dplyr::ungroup()
+# 
+# results_rg_tabla |>
+#   gt() |> 
+#   tab_header(
+#     title = "Das Gupta decomposition",
+#     subtitle = "Differences in extreme heat exposure"
+#   ) |> 
+#   cols_label(
+#     macroregion = "Macro-region",
+#     region = "State",
+#     exposure_rate = "Exposure rate",
+#     effect_heat = "Heat effect",
+#     effect_age = "Age effect",
+#     effect_disability = "Disability effect",
+#     total_diff = "Total difference"
+#   ) |>
+#   cols_hide(columns = c(primera_fila, n_filas)) |>
+#   text_transform(
+#     locations = cells_body(columns = macroregion),
+#     fn = function(x) {
+#       idx <- which(results_rg_tabla$primera_fila)
+#       result <- rep("", nrow(results_rg_tabla))
+#       
+#       for (i in idx) {
+#         n <- results_rg_tabla$n_filas[i]
+#         region_name <- results_rg_tabla$macroregion[i]
+#         result[i] <- as.character(
+#           tags$div(
+#             style = sprintf(
+#               "writing-mode: vertical-rl; 
+#                text-orientation: mixed; 
+#                font-weight: bold; 
+#                font-size: 14px;
+#                height: %dpx;
+#                display: flex;
+#                align-items: center;
+#                justify-content: center;
+#                margin: 0;
+#                padding: 0;",
+#               n * 35  # Ajusta este valor según la altura de tus filas
+#             ),
+#             region_name
+#           )
+#         )
+#       }
+#       result
+#     }
+#   ) |>
+#   tab_style(
+#     style = cell_borders(
+#       sides = "right",
+#       color = "#D3D3D3",
+#       weight = px(1)
+#     ),
+#     locations = cells_body(columns = macroregion)
+#   ) |>
+#   fmt_number(
+#     columns = c(exposure_rate, effect_heat, effect_age, effect_disability, total_diff),
+#     decimals = 6
+#   ) |> 
+#   data_color(
+#     columns = c(effect_heat, effect_age, effect_disability),
+#     colors = scales::col_numeric(
+#       palette = c("#2a9d8f", "white", "#d62828"),
+#       domain = c(-0.2, 0.2)
+#     )
+#   ) |> 
+#   tab_style(
+#     style = cell_text(weight = "bold"),
+#     locations = cells_column_labels()
+#   ) |>
+#   tab_options(
+#     table.font.size = 12,
+#     heading.title.font.size = 16,
+#     heading.subtitle.font.size = 12
+#   )
+```
+
+```{r}
+# #| label: Tabla Das Gupta con flextable
+# library(flextable)
+# 
+# results_rg |> 
+#   dplyr::select(
+#     macroregion,
+#     region,
+#     exposure_rate,
+#     effect_heat,
+#     effect_age,
+#     effect_disability,
+#     total_diff
+#   ) |>
+#   flextable() |>
+#   set_header_labels(
+#     macroregion = "Macro-region",
+#     region = "State",
+#     exposure_rate = "Exposure rate",
+#     effect_heat = "Heat effect",
+#     effect_age = "Age effect",
+#     effect_disability = "Disability effect",
+#     total_diff = "Total difference"
+#   ) |>
+#   merge_v(j = "macroregion") |>  # ¡Aquí está la magia!
+#   valign(j = "macroregion", valign = "center") |>
+#   bold(part = "header") |>
+#   bold(j = "macroregion") |>
+#   colformat_double(j = c("exposure_rate", "effect_heat", "effect_age", "effect_disability", "total_diff"), digits = 6) |>
+#   add_header_lines(values = c("Das Gupta decomposition", "Differences in extreme heat exposure")) |>
+#   theme_booktabs()
+```
+
+
+
 ## Steepwise
 
 ## Horiuchi
 
 ```{r}
+#| label: Hopriuchi con funciones
 # source("R/prepare_horiuchi_data.R")
 # source("R/run_horiuchi.R")
 # source("R/process_horiuchi.R")
@@ -1684,6 +1873,7 @@ exposure_table <- datos_decomp |>
 
 ```{r}
 exposure_table |> 
+  dplyr::filter(!is.na(region)) |>  
   gt() |> 
   tab_header(
     title = "Exposición total al calor extremo"
@@ -1692,14 +1882,93 @@ exposure_table |>
     columns = exposure_total,
     decimals = 6
   ) |> 
+  sub_missing(
+    columns = exposure_total,
+    missing_text = ""
+  ) |>
   data_color(
     columns = exposure_total,
     colors = scales::col_numeric(
       palette = c("#2a9d8f", "white", "#d62828"),
-      domain = range(exposure_table$exposure_total)
+      domain = range(exposure_table$exposure_total, na.rm = TRUE),
+      na.color = "white"
     )
   )
 ```
+
+```{r}
+#| label: Horiuchi por componente
+effects_horiuchi <- horiuchi_df |>
+  dplyr::group_by(region, component) |>
+  dplyr::summarise(effect = sum(contribution), .groups = "drop") |>
+  tidyr::pivot_wider(
+    names_from = component,
+    values_from = effect,
+    names_prefix = "effect_"
+  )
+
+
+```
+
+```{r}
+
+exposure_table <- datos_decomp |>
+  group_by(region) |>
+  summarise(exposure_total = unique(exposure))
+
+```
+
+```{r}
+
+ref_rate <- exposure_table |>
+  filter(region == "Nacional") |>
+  pull(exposure_total)
+
+```
+
+```{r}
+horiuchi_results <- exposure_table |>
+  filter(region != "Nacional") |>
+  left_join(effects_horiuchi, by = "region") |>
+  mutate(
+    total_effects = effect_s + effect_d + effect_h,
+    total_diff = exposure_total - ref_rate
+  )
+
+```
+
+
+```{r}
+horiuchi_results <- horiuchi_results |>
+  dplyr::mutate(
+    region = factor(region, levels = orden_estados)
+  ) |>
+  dplyr::arrange(region)
+horiuchi_results |> 
+  dplyr::select(
+    region,
+    effect_h,
+    effect_s,
+    effect_d,
+    total_diff
+  ) |>
+  gt() |>
+  tab_header(
+    title = "Horiuchi decomposition",
+    subtitle = "Differences in extreme heat exposure vs. Nacional"
+  ) |> 
+  cols_label(
+    region = "State",
+    effect_h = "Heat effect",
+    effect_s = "Age effect",
+    effect_d = "Disability effect",
+    total_diff = "Total difference"
+  )
+
+
+```
+
+
 
 ```{r}
 tasa_nacional_horiuchi <- datos_decomp |> 
@@ -1709,6 +1978,10 @@ tasa_nacional_horiuchi <- datos_decomp |>
 
 print(tasa_nacional_horiuchi)
 ```
+
+
+
+## Tablas de cada método 
 
 # Gráficas \[Anterior\]
 
