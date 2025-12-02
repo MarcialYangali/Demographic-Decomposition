@@ -1731,7 +1731,6 @@ $$
 \qquad(11)
 $$
 
-
 ```{r}
 # Construction of joint structures (ω)
 # compute p(z|a)
@@ -1862,8 +1861,7 @@ print(names(data_B))
 
 ```
 
-**aquí me quede** 
-
+**aquí me quede**
 
 # Gráficas \[Anterior\]
 
