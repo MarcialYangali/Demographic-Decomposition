@@ -1572,298 +1572,147 @@ group_by(region, component, discapacidad) |>
     theme(legend.position = "bottom")
 ```
 
-### Extension of Kitagawa
+### Comparativa
 
-Given that the interaction between age and disability cannot be uniquely assigned to each structural component, we construct a symmetric version of the Kitagawa decomposition. To do this, we consider two alternative parameterizations of the joint age–disability structure and average the contributions obtained from both. This ensures that the decomposition remains exact (the components sum to the observed difference) and is less dependent on the arbitrary choice of factor ordering.
+El objetivo central de esta sección es comparar dos enfoques clásicos y ampliamente utilizados en la descomposición demográfica de tasas: el método algebraico-simétrico de Das Gupta y el método de perturbación continua de Horiuchi, Wilmoth y Pletcher. Ambos permiten descomponer diferencias en indicadores agregados en función de sus múltiples determinantes, pero lo hacen desde principios matemáticos distintos, lo que potencialmente produce diferencias en interpretación, estabilidad y sensibilidad.
 
-Let:
+A diferencia de Kitagawa (1955), cuya formulación sólo opera para dos factores y en estructuras del tipo media ponderada, tanto Das Gupta (1978, 1991, 1993) como Horiuchi (2008) permiten trabajar con tres o más determinantes simultáneos, condición indispensable para nuestro caso de estudio, que requiere descomponer diferencias en la exposición al calor considerando simultáneamente edad, discapacidad y tasas específicas.
 
--   $a$: age category
--   $z \in \{0, 1\}$: disability status
--   $G$: group or region
-
-We denote:
-
--   $s_a^{(G)}$: proportion of the population at age $a$
--   $p_{z|a}^{(G)}$: proportion of individuals in state $z$ *within* age $a$
--   $h_{a,z}^{(G)}$: proportion of person-days exposed to extreme heat in subgroup $(a, z, G)$
-
-The joint rate is defined as:
-
-$$
-R^{(G)} = \sum_a \sum_z s_a^{(G)} \, p_{z|a}^{(G)} \, h_{a,z}^{(G)}.
-\qquad(1)
-$$
-
-This is the exposure measure simultaneously weighted by age and disability.
-
-The joint structure is defined as:
-
-$$
-\omega_{a,z}^{(G)} = s_a^{(G)} \, p_{z|a}^{(G)},
-\qquad(2)
-$$
-
-and then the rate in (1) can be written as:
-
-$$
-R^{(G)} = \sum_{a,z} \omega_{a,z}^{(G)} \, h_{a,z}^{(G)}.
-\qquad(3)
-$$
-
-We want to compare two regions $A$ and $B$:
-
-$$
-\Delta R = R^{(A)} - R^{(B)}.
-$$
-
-Applying Kitagawa to representation (3):
-
-$$
-\Delta R = \sum_{a,z} \left(h_{a,z}^{(A)} - h_{a,z}^{(B)}\right) \frac{\omega_{a,z}^{(A)} + \omega_{a,z}^{(B)}}{2} + \sum_{a,z} \left(\omega_{a,z}^{(A)} - \omega_{a,z}^{(B)}\right) \frac{h_{a,z}^{(A)} + h_{a,z}^{(B)}}{2}.
-\qquad(4)
-$$
-
-$$
-\underbrace{\hspace{5cm}}_{\text{Heat-rate effect } (RE_h)} \quad \underbrace{\hspace{5cm}}_{\text{Joint composition effect } (CE_\omega)}
-$$
-
-This separates:
-
--   changes in **heat intensity** $\rightarrow RE_h$
--   changes in **joint age–disability structure** $\rightarrow CE_\omega$
-
-Since
-
-$$
-\omega_{a,z}^{(G)} = s_a^{(G)} \, p_{z|a}^{(G)},
-$$
-
-we can apply Kitagawa again to the product $s \cdot p$.
-
-The difference in the joint structure can be written as:
-
-$$
-\Delta\omega_{a,z} = \left(s_a^{(A)} - s_a^{(B)}\right) \frac{p_{z|a}^{(A)} + p_{z|a}^{(B)}}{2} + \left(p_{z|a}^{(A)} - p_{z|a}^{(B)}\right) \frac{s_a^{(A)} + s_a^{(B)}}{2}.
-\qquad(5)
-$$
-
-Substituting (5) into $CE_\omega$, we obtain:
-
-Age composition effect
-
-$$
-CE_s = \sum_{a,z} \left(s_a^{(A)} - s_a^{(B)}\right) \frac{p_{z|a}^{(A)} + p_{z|a}^{(B)}}{2} \cdot \frac{h_{a,z}^{(A)} + h_{a,z}^{(B)}}{2}.
-\qquad(6)
-$$
-
-Disability composition effect
-
-$$
-CE_d = \sum_{a,z} \left(p_{z|a}^{(A)} - p_{z|a}^{(B)}\right) \frac{s_a^{(A)} + s_a^{(B)}}{2} \cdot \frac{h_{a,z}^{(A)} + h_{a,z}^{(B)}}{2}.
-\qquad(7)
-$$
-
-Thus, we obtain:
-
-$$
-\boxed{\Delta R = RE_h + CE_s + CE_d.}
-\qquad(8)
-$$
-
-Since
-
-$$
-\omega = s \cdot p_{z|a},
-$$
-
-we can rewrite:
-
--   marginal prevalence of disability:
-
-$$
-q_z^{(G)} = \frac{N_z^{(G)}}{N^{(G)}}
-$$
-
--   age structure within each disability status:
-
-$$
-s_{a|z}^{(G)} = \frac{N_{a,z}^{(G)}}{N_z^{(G)}}
-$$
-
-Then the joint structure can also be written as:
-
-$$
-\omega_{a,z}^{(G)} = q_z^{(G)} \, s_{a|z}^{(G)}.
-\qquad(9)
-$$
-
-Applying Kitagawa to this form yields a second decomposition:
-
-$$
-\Delta R = RE_h + CE_q + CE_{s|z}.
-\qquad(10)
-$$
-
-where:
-
--   $CE_q$: effect of having more/fewer people with disabilities
--   $CE_{s|z}$: differences in age *within each* disability category
-
-Given that the age–disability interaction cannot be uniquely allocated (as is well known in decomposition theory), we can define a symmetric version:
-
-$$
-RE_h^* = \frac{RE_h^{(A\rightarrow B)} + RE_h^{(B\rightarrow A)}}{2} \approx RE_h
-$$
-
-$$
-CE_{\text{age}}^* = \frac{CE_s + CE_{s|z}}{2},
-$$
-
-$$
-CE_{\text{dis}}^* = \frac{CE_d + CE_q}{2}.
-$$
-
-And we still preserve:
-
-$$
-\Delta R = RE_h^* + CE_{\text{age}}^* + CE_{\text{dis}}^*.
-\qquad(11)
-$$
-
+En ausencia de comparaciones sistemáticas en la literatura —ningún estudio ha evaluado formalmente las diferencias entre ambos métodos bajo un mismo conjunto de datos y función de tasa— en esta sección se propone un contraste riguroso entre ambos enfoques aplicados al mismo indicador demográfico.
 
 ```{r}
-# Construction of joint structures (ω)
-# compute p(z|a)
-compute_p_given_a <- function(df, age_col, dis_col, pop_col){
-  df |>
-    group_by(.data[[age_col]]) |>
+# ==================================================
+# Data preparation: Age × Disability × Heat rate
+# ==================================================
+
+
+
+prepare_threeway_data <- function(df) {
+  
+  out <- df |>
+    group_by(region, age5) |>
+    summarise(
+      S = sum(pop * 366, na.rm = TRUE),      # person-days
+      D = sum(popdis * 366, na.rm = TRUE),   # disabled person-days
+      H = sum(pop * heatdays, na.rm = TRUE), # heat person-days
+      .groups = "drop"
+    ) |>
+    group_by(region) |>
     mutate(
-      p = .data[[pop_col]] / sum(.data[[pop_col]], na.rm = TRUE)
+      s = S / sum(S, na.rm = TRUE),  # age structure
+      d = D / S,                     # disability prevalence
+      h = H / S                      # heat rate
     ) |>
     ungroup()
+  
+  out
 }
 
-# marginal disability prevalence q(z)
-compute_q <- function(df, dis_col, pop_col){
-  df |>
-    mutate(total_pop = sum(.data[[pop_col]], na.rm = TRUE)) |>
-    group_by(.data[[dis_col]]) |>
-    mutate(
-      q = sum(.data[[pop_col]], na.rm = TRUE) / total_pop
-    ) |>
-    ungroup() |>
-    select(-total_pop)
+# ==================================================
+# Three-way symmetric decomposition (sequential averages)
+# ==================================================
+
+threeway_decomposition <- function(data, ref_region, cmp_region) {
+  
+  ref <- data |>
+    filter(region == ref_region) |>
+    select(age5, s_ref = s, d_ref = d, h_ref = h)
+  
+  cmp <- data |>
+    filter(region == cmp_region) |>
+    select(age5, s_cmp = s, d_cmp = d, h_cmp = h)
+  
+  merged <- full_join(ref, cmp, by = "age5") |>
+    mutate(across(where(is.numeric), ~replace_na(.x, 0)))
+  
+  # total rate
+  R_ref <- sum(merged$s_ref * merged$d_ref * merged$h_ref) * 100
+  R_cmp <- sum(merged$s_cmp * merged$d_cmp * merged$h_cmp) * 100
+  
+  # -----------------------------
+  # Order 1: s → d → h
+  # -----------------------------
+  R1_1 <- sum(merged$s_cmp * merged$d_ref * merged$h_ref) * 100
+  R1_2 <- sum(merged$s_cmp * merged$d_cmp * merged$h_ref) * 100
+  
+  eff_s_1 <- R1_1 - R_ref
+  eff_d_1 <- R1_2 - R1_1
+  eff_h_1 <- R_cmp - R1_2
+  
+  # -----------------------------
+  # Order 2: h → d → s
+  # -----------------------------
+  R2_1 <- sum(merged$s_ref * merged$d_ref * merged$h_cmp) * 100
+  R2_2 <- sum(merged$s_ref * merged$d_cmp * merged$h_cmp) * 100
+  
+  eff_h_2 <- R2_1 - R_ref
+  eff_d_2 <- R2_2 - R2_1
+  eff_s_2 <- R_cmp - R2_2
+  
+  # -----------------------------
+  # Order 3: d → s → h
+  # -----------------------------
+  R3_1 <- sum(merged$s_ref * merged$d_cmp * merged$h_ref) * 100
+  R3_2 <- sum(merged$s_cmp * merged$d_cmp * merged$h_ref) * 100
+  
+  eff_d_3 <- R3_1 - R_ref
+  eff_s_3 <- R3_2 - R3_1
+  eff_h_3 <- R_cmp - R3_2
+  
+  # symmetric average
+  eff_s   <- mean(c(eff_s_1, eff_s_2, eff_s_3))
+  eff_d   <- mean(c(eff_d_1, eff_d_2, eff_d_3))
+  eff_h   <- mean(c(eff_h_1, eff_h_2, eff_h_3))
+  
+  tibble(
+    region = cmp_region,
+    R_ref = R_ref,
+    R_cmp = R_cmp,
+    total_diff = R_cmp - R_ref,
+    effect_age = eff_s,
+    effect_disability = eff_d,
+    effect_heat = eff_h,
+    effects_sum = eff_s + eff_d + eff_h,
+    check = abs((eff_s + eff_d + eff_h) - (R_cmp - R_ref))
+  )
 }
 
-# compute s(a|z)
-compute_s_given_z <- function(df, age_col, dis_col, pop_col){
-  df |>
-    group_by(.data[[dis_col]]) |>
-    mutate(
-      s_cond = .data[[pop_col]] / sum(.data[[pop_col]], na.rm = TRUE)
-    ) |>
-    ungroup()
-}
+# ==================================================
+# Wrapper function
+# ==================================================
 
-# create joint structure w^{1} = s_a * p_{z|a}
-structure_A <- function(df){
-  df |> mutate(w = s * p)
-}
-
-# create joint structure w^{2} = q_z * s_{a|z}
-structure_B <- function(df){
-  df |> mutate(w = q * s_cond)
-}
-
-# wrapper for building the chosen joint structure
-build_structure <- function(df, version = c("A","B")){
-  version <- match.arg(version)
-  if(version == "A"){
-    df <- structure_A(df)
-  } else {
-    df <- structure_B(df)
+run_threeway_decomposition <- function(df, reference = "National") {
+  
+  data <- prepare_threeway_data(df)
+  
+  if (!reference %in% unique(data$region)) {
+    stop(paste0("Reference region '", reference, "' not found."))
   }
-  return(df)
+  
+  regions <- setdiff(unique(data$region), reference)
+  
+  results <- purrr::map_dfr(
+    regions,
+    ~threeway_decomposition(data, reference, .x)
+  )
+  
+  list(
+    results = results,
+    data = data
+  )
 }
 
-```
+# ==================================================
+# Example
+# ==================================================
 
-```{r}
-# Expand disability categories into long format
-df_long <- df |> 
-  mutate(popnodis = pop - popdis) |> 
-  select(-pop) |> 
-  pivot_longer(
-    cols = c("popnodis","dis_mov","dis_mult","dis_otros"),
-    names_to = "dis",
-    values_to = "pop"
-  )
+source("das_gupta_threeway.R")
 
-# Sum population and person-days by region/age/disability
-data_base <- df_long |> 
-  group_by(region, age5, dis) |> 
-  summarise(
-    S = sum(pop, na.rm = TRUE),
-    H = sum(pop * heatdays, na.rm = TRUE)
-  ) |> 
-  ungroup()
-
-# Age structure (marginal)
-data_base <- data_base |> 
-  group_by(region, age5) |> 
-  mutate(
-    s = S / sum(S, na.rm = TRUE)
-  ) |> 
-  ungroup()
-
-# Heat-specific rate h(a, z)
-data_base <- data_base |> 
-  mutate(
-    h = H / S
-  )
-
-data_base <- data_base |> 
-  rename(pop = S)
-
-# p(z|a)
-data_base <- compute_p_given_a(
-  df       = data_base,
-  age_col  = "age5",
-  dis_col  = "dis",
-  pop_col  = "pop"
-)
-
-# q(z)
-data_base <- compute_q(
-  df       = data_base,
-  dis_col  = "dis",
-  pop_col  = "pop"
-)
-
-# s(a|z)
-data_base <- compute_s_given_z(
-  df       = data_base,
-  age_col  = "age5",
-  dis_col  = "dis",
-  pop_col  = "pop"
-)
-
-# Joint structure version A: w_A = s * p
-data_A <- build_structure(data_base, version = "A")
-
-# Joint structure version B: w_B = q * s_cond
-data_B <- build_structure(data_base, version = "B")
-
-# Validation
-message("Joint structures successfully constructed:")
-print(names(data_A))
-print(names(data_B))
+results <- das_gupta_threeway(data_prepared, 
+                              ref_region = "National",
+                              cmp_region = "Baja California")
 
 ```
-
-**aquí me quede** 
-
 
 # Gráficas \[Anterior\]
 
