@@ -253,9 +253,9 @@ Cargamos base de datos de población y discapacidad
 ```{r}
 df <- read_excel("in/POP_UTCI_mun.xlsx")
 
-mapa <- sf::read_sf("~/Documents/Qgis/Censo_2020/MG_2020_Integrado/conjunto_de_datos/mapa_ent_small.shp")
+#mapa <- sf::read_sf("~/Documents/Qgis/Censo_2020/MG_2020_Integrado/conjunto_de_datos/mapa_ent_small.shp")
 
-df <- df |> 
+#df <- df |> 
     left_join(mapa |>
                   st_drop_geometry() |> 
                   select(cve_ent = CVE_ENT, NOMGEO),
@@ -867,7 +867,7 @@ resumen_discapacidad |>
     theme(legend.position = "bottom")
 ```
 
-### 2. Métodos Simétricos: Das Gupta, Horiuchi, Stepwise Replacement y Extensión de Kitagawa
+### 2. Métodos Simétricos: Das Gupta, Horiuchi, Stepwise Replacement
 
 En una segunda etapa se aplicarán métodos simétricos de descomposición, capaces de manejar tres componentes simultáneamente (s–d–h).
 
@@ -1150,12 +1150,12 @@ exposure_fun <- function(pars) {
 
 regiones <- names(table(datos_decomp$region))
 
-ref <- regiones[18] # Nacional como referencia
-regiones <- regiones[-18]
+#ref <- regiones[18] # Nacional como referencia
+#regiones <- regiones[-18]
 
 # Cambiar cuando se ven regiones
-#ref <- regiones[3] # Nacional como referencia
-#regiones <- regiones[-3]
+ref <- regiones[3] # Nacional como referencia
+regiones <- regiones[-3]
 
 # Lista de parámetros
 data_list <- split(datos_decomp,
@@ -1574,145 +1574,142 @@ group_by(region, component, discapacidad) |>
 
 ### Comparativa
 
-El objetivo central de esta sección es comparar dos enfoques clásicos y ampliamente utilizados en la descomposición demográfica de tasas: el método algebraico-simétrico de Das Gupta y el método de perturbación continua de Horiuchi, Wilmoth y Pletcher. Ambos permiten descomponer diferencias en indicadores agregados en función de sus múltiples determinantes, pero lo hacen desde principios matemáticos distintos, lo que potencialmente produce diferencias en interpretación, estabilidad y sensibilidad.
+El objetivo central de esta sección es comparar dos enfoques clásicos 
 
-A diferencia de Kitagawa (1955), cuya formulación sólo opera para dos factores y en estructuras del tipo media ponderada, tanto Das Gupta (1978, 1991, 1993) como Horiuchi (2008) permiten trabajar con tres o más determinantes simultáneos, condición indispensable para nuestro caso de estudio, que requiere descomponer diferencias en la exposición al calor considerando simultáneamente edad, discapacidad y tasas específicas.
-
-En ausencia de comparaciones sistemáticas en la literatura —ningún estudio ha evaluado formalmente las diferencias entre ambos métodos bajo un mismo conjunto de datos y función de tasa— en esta sección se propone un contraste riguroso entre ambos enfoques aplicados al mismo indicador demográfico.
+## Das Gupta
 
 ```{r}
-# ==================================================
-# Data preparation: Age × Disability × Heat rate
-# ==================================================
+
+source("R/data_decomposition.R")   
+source("R/das_gupta.R")   
 
 
-
-prepare_threeway_data <- function(df) {
-  
-  out <- df |>
-    group_by(region, age5) |>
-    summarise(
-      S = sum(pop * 366, na.rm = TRUE),      # person-days
-      D = sum(popdis * 366, na.rm = TRUE),   # disabled person-days
-      H = sum(pop * heatdays, na.rm = TRUE), # heat person-days
-      .groups = "drop"
-    ) |>
-    group_by(region) |>
-    mutate(
-      s = S / sum(S, na.rm = TRUE),  # age structure
-      d = D / S,                     # disability prevalence
-      h = H / S                      # heat rate
-    ) |>
-    ungroup()
-  
-  out
-}
-
-# ==================================================
-# Three-way symmetric decomposition (sequential averages)
-# ==================================================
-
-threeway_decomposition <- function(data, ref_region, cmp_region) {
-  
-  ref <- data |>
-    filter(region == ref_region) |>
-    select(age5, s_ref = s, d_ref = d, h_ref = h)
-  
-  cmp <- data |>
-    filter(region == cmp_region) |>
-    select(age5, s_cmp = s, d_cmp = d, h_cmp = h)
-  
-  merged <- full_join(ref, cmp, by = "age5") |>
-    mutate(across(where(is.numeric), ~replace_na(.x, 0)))
-  
-  # total rate
-  R_ref <- sum(merged$s_ref * merged$d_ref * merged$h_ref) * 100
-  R_cmp <- sum(merged$s_cmp * merged$d_cmp * merged$h_cmp) * 100
-  
-  # -----------------------------
-  # Order 1: s → d → h
-  # -----------------------------
-  R1_1 <- sum(merged$s_cmp * merged$d_ref * merged$h_ref) * 100
-  R1_2 <- sum(merged$s_cmp * merged$d_cmp * merged$h_ref) * 100
-  
-  eff_s_1 <- R1_1 - R_ref
-  eff_d_1 <- R1_2 - R1_1
-  eff_h_1 <- R_cmp - R1_2
-  
-  # -----------------------------
-  # Order 2: h → d → s
-  # -----------------------------
-  R2_1 <- sum(merged$s_ref * merged$d_ref * merged$h_cmp) * 100
-  R2_2 <- sum(merged$s_ref * merged$d_cmp * merged$h_cmp) * 100
-  
-  eff_h_2 <- R2_1 - R_ref
-  eff_d_2 <- R2_2 - R2_1
-  eff_s_2 <- R_cmp - R2_2
-  
-  # -----------------------------
-  # Order 3: d → s → h
-  # -----------------------------
-  R3_1 <- sum(merged$s_ref * merged$d_cmp * merged$h_ref) * 100
-  R3_2 <- sum(merged$s_cmp * merged$d_cmp * merged$h_ref) * 100
-  
-  eff_d_3 <- R3_1 - R_ref
-  eff_s_3 <- R3_2 - R3_1
-  eff_h_3 <- R_cmp - R3_2
-  
-  # symmetric average
-  eff_s   <- mean(c(eff_s_1, eff_s_2, eff_s_3))
-  eff_d   <- mean(c(eff_d_1, eff_d_2, eff_d_3))
-  eff_h   <- mean(c(eff_h_1, eff_h_2, eff_h_3))
-  
-  tibble(
-    region = cmp_region,
-    R_ref = R_ref,
-    R_cmp = R_cmp,
-    total_diff = R_cmp - R_ref,
-    effect_age = eff_s,
-    effect_disability = eff_d,
-    effect_heat = eff_h,
-    effects_sum = eff_s + eff_d + eff_h,
-    check = abs((eff_s + eff_d + eff_h) - (R_cmp - R_ref))
+data_national <- df |>
+  dplyr::bind_rows(
+    df |> dplyr::mutate(region = "Nacional")
   )
-}
 
-# ==================================================
-# Wrapper function
-# ==================================================
 
-run_threeway_decomposition <- function(df, reference = "National") {
-  
-  data <- prepare_threeway_data(df)
-  
-  if (!reference %in% unique(data$region)) {
-    stop(paste0("Reference region '", reference, "' not found."))
-  }
-  
-  regions <- setdiff(unique(data$region), reference)
-  
-  results <- purrr::map_dfr(
-    regions,
-    ~threeway_decomposition(data, reference, .x)
-  )
-  
-  list(
-    results = results,
-    data = data
-  )
-}
+data <- data_decomposition(data_national)
 
-# ==================================================
-# Example
-# ==================================================
 
-source("das_gupta_threeway.R")
+regions <- setdiff(unique(data$region), "Nacional")
 
-results <- das_gupta_threeway(data_prepared, 
-                              ref_region = "National",
-                              cmp_region = "Baja California")
+results_rg <- purrr::map_dfr(
+  regions,
+  ~ das_gupta(
+      df = data,
+      ref_region = "Nacional",
+      cmp_region = .x
+    )
+)
+
 
 ```
+
+```{r}
+results_rg|> 
+  dplyr::select(
+    region,
+    effect_heat,
+    effect_age,
+    effect_disability,
+    total_diff
+  ) |> 
+  dplyr::arrange(desc(abs(total_diff))) |> 
+  gt() |> 
+  tab_header(
+    title = "Das Gupta decomposition",
+    subtitle = "Differences in extreme heat exposure "
+  ) |> 
+  cols_label(
+    region = "Region",
+    effect_heat = "Heat effect",
+    effect_age = "Age effect",
+    effect_disability = "Disability effect",
+    total_diff = "Total difference"
+  ) |> 
+  fmt_number(
+    columns = c(effect_heat, effect_age, effect_disability, total_diff),
+    decimals = 4
+  ) |> 
+  data_color(
+    columns = c(effect_heat, effect_age, effect_disability),
+    colors = scales::col_numeric(
+      palette = c("#2a9d8f", "white", "#d62828"),
+      domain = c(-0.2, 0.2)
+    )
+  ) |> 
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()
+  ) |> 
+  tab_options(
+    table.font.size = 12,
+    heading.title.font.size = 16,
+    heading.subtitle.font.size = 12
+  )
+```
+
+## Steepwise
+
+## Horiuchi 
+```{r}
+source("R/prepare_horiuchi_data.R")
+source("R/run_horiuchi.R")
+source("R/process_horiuchi.R")
+source("R/horiuchi_global.R")
+
+discapacidades <- c("popdis", "dis_mov", "dis_mult", "dis_otros")
+age5_levels <- c("0-4","5-9","10-14","15-19","20-24","25-29","30-34",
+                 "35-39","40-44","45-49","50-54","55-59","60-64",
+                 "65-69","70-74","75-79","80-84","85+")
+
+datos_decomp <- prepare_horiuchi_data(df, discapacidades, age5_levels)
+horiuchi_raw  <- run_horiuchi(datos_decomp, age5_levels)
+horiuchi_df   <- process_horiuchi(horiuchi_raw, datos_decomp, age5_levels)
+
+```
+
+```{r}
+exposure_table <- datos_decomp |>
+  dplyr::group_by(region) |>
+  dplyr::summarise(
+    exposure_total = unique(exposure),
+    .groups = "drop"
+  ) |>
+  dplyr::arrange(desc(exposure_total))
+
+```
+
+```{r}
+exposure_table |> 
+  gt() |> 
+  tab_header(
+    title = "Exposición total al calor extremo"
+  ) |> 
+  fmt_number(
+    columns = exposure_total,
+    decimals = 4
+  ) |> 
+  data_color(
+    columns = exposure_total,
+    colors = scales::col_numeric(
+      palette = c("#2a9d8f", "white", "#d62828"),
+      domain = range(exposure_table$exposure_total)
+    )
+  )
+```
+
+```{r}
+tasa_nacional_horiuchi <- datos_decomp |> 
+    filter(region == "Nacional") |> 
+    summarise(tasa = sum(s * d * h * 100)) |> 
+    pull(tasa)
+
+print(tasa_nacional_horiuchi)
+```
+
 
 # Gráficas \[Anterior\]
 
