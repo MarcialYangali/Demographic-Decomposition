@@ -253,9 +253,9 @@ Cargamos base de datos de población y discapacidad
 ```{r}
 df <- read_excel("in/POP_UTCI_mun.xlsx")
 
-#mapa <- sf::read_sf("~/Documents/Qgis/Censo_2020/MG_2020_Integrado/conjunto_de_datos/mapa_ent_small.shp")
+mapa <- sf::read_sf("in/mapa_ent_small.shp")
 
-#df <- df |> 
+df <- df |> 
     left_join(mapa |>
                   st_drop_geometry() |> 
                   select(cve_ent = CVE_ENT, NOMGEO),
@@ -1150,12 +1150,12 @@ exposure_fun <- function(pars) {
 
 regiones <- names(table(datos_decomp$region))
 
-#ref <- regiones[18] # Nacional como referencia
-#regiones <- regiones[-18]
+ref <- regiones[18] # Nacional como referencia
+regiones <- regiones[-18]
 
 # Cambiar cuando se ven regiones
-ref <- regiones[3] # Nacional como referencia
-regiones <- regiones[-3]
+#ref <- regiones[3] # Nacional como referencia
+#regiones <- regiones[-3]
 
 # Lista de parámetros
 data_list <- split(datos_decomp,
@@ -1574,7 +1574,7 @@ group_by(region, component, discapacidad) |>
 
 ### Comparativa
 
-El objetivo central de esta sección es comparar dos enfoques clásicos 
+El objetivo central de esta sección es comparar dos enfoques clásicos
 
 ## Das Gupta
 
@@ -1631,7 +1631,7 @@ results_rg|>
   ) |> 
   fmt_number(
     columns = c(effect_heat, effect_age, effect_disability, total_diff),
-    decimals = 4
+    decimals = 6
   ) |> 
   data_color(
     columns = c(effect_heat, effect_age, effect_disability),
@@ -1653,21 +1653,21 @@ results_rg|>
 
 ## Steepwise
 
-## Horiuchi 
+## Horiuchi
+
 ```{r}
-source("R/prepare_horiuchi_data.R")
-source("R/run_horiuchi.R")
-source("R/process_horiuchi.R")
-source("R/horiuchi_global.R")
-
-discapacidades <- c("popdis", "dis_mov", "dis_mult", "dis_otros")
-age5_levels <- c("0-4","5-9","10-14","15-19","20-24","25-29","30-34",
-                 "35-39","40-44","45-49","50-54","55-59","60-64",
-                 "65-69","70-74","75-79","80-84","85+")
-
-datos_decomp <- prepare_horiuchi_data(df, discapacidades, age5_levels)
-horiuchi_raw  <- run_horiuchi(datos_decomp, age5_levels)
-horiuchi_df   <- process_horiuchi(horiuchi_raw, datos_decomp, age5_levels)
+# source("R/prepare_horiuchi_data.R")
+# source("R/run_horiuchi.R")
+# source("R/process_horiuchi.R")
+# source("R/horiuchi_global.R")
+# 
+# discapacidades <- c("popdis", "dis_mov", "dis_mult", "dis_otros")
+# age5_levels <- c("0-4","5-9","10-14","15-19","20-24","25-29","30-34",
+#                  "35-39","40-44","45-49","50-54","55-59","60-64",
+#                  "65-69","70-74","75-79","80-84","85+")
+# 
+# horiuchi_raw  <- run_horiuchi(datos_decomp, age5_levels)
+# horiuchi_df   <- process_horiuchi(horiuchi_raw, datos_decomp, age5_levels)
 
 ```
 
@@ -1690,7 +1690,7 @@ exposure_table |>
   ) |> 
   fmt_number(
     columns = exposure_total,
-    decimals = 4
+    decimals = 6
   ) |> 
   data_color(
     columns = exposure_total,
@@ -1709,7 +1709,6 @@ tasa_nacional_horiuchi <- datos_decomp |>
 
 print(tasa_nacional_horiuchi)
 ```
-
 
 # Gráficas \[Anterior\]
 
