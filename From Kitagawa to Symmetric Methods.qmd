@@ -118,6 +118,7 @@ This total difference may arise from:
 \[Pendiente: Revisar y confirmar que los porcentajes o relativos tal como son calculados permiten la mejor interpretación\]
 
 ```{r}
+#| label: Kitagawa 
 kitagawa_generic <- function(
   data,
   group_col, # ejemplo: "region"
@@ -1574,7 +1575,7 @@ group_by(region, component, discapacidad) |>
 
 ### Comparativa
 
-El objetivo central de esta sección es comparar dos enfoques clásicos
+El objetivo central de esta sección es comparar dos enfoques clásicos***
 
 ## Das Gupta
 
@@ -1702,8 +1703,6 @@ results_rg |>
     heading.subtitle.font.size = 12
   )
 ```
-
-
 
 ```{r}
 #| label: Tabla Das Gupa
@@ -1837,7 +1836,213 @@ results_rg |>
 #   theme_booktabs()
 ```
 
+### por discapacidad
 
+```{r}
+tasas_discapacidad <- datos_decomp |> 
+  group_by(region, discapacidad) |> 
+  summarise(
+    tasa = sum(specific_exp),
+    .groups = "drop"
+  )
+
+split_data <- split(datos_decomp, datos_decomp$discapacidad)
+
+resultados_list <- list()
+
+for (disc in discapacidades) {
+  
+  df_k <- split_data[[disc]]
+  
+  res_k <- das_gupta(
+    df = df_k,
+    ref_region = "Nacional",
+    cmp_region = "Aguascalientes"   # o un loop para todos
+  ) |> 
+    mutate(discapacidad = disc)
+  
+  resultados_list[[disc]] <- res_k
+}
+
+resultados_dg <- bind_rows(resultados_list)
+
+regiones <- unique(datos_decomp$region)
+regiones <- regiones[regiones != "Nacional"]
+
+resultados_list <- list()
+
+for (disc in discapacidades) {
+  df_k <- split_data[[disc]]
+  
+  for (reg in regiones) {
+    
+    res_k <- das_gupta_threeway(
+      df = df_k,
+      ref_region = "Nacional",
+      cmp_region = reg
+    ) |> 
+      mutate(
+        discapacidad = disc,
+        region = reg
+      )
+    
+    resultados_list[[paste(disc, reg, sep="_")]] <- res_k
+  }
+}
+
+resultados_dg <- bind_rows(resultados_list)
+
+
+```
+
+
+```{r}
+
+discapacidades <- unique(datos_decomp$discapacidad)
+split_data <- split(datos_decomp, datos_decomp$discapacidad)
+
+regiones <- unique(datos_decomp$region)
+regiones <- regiones[regiones != "Nacional"]
+
+resultados_list <- list()
+
+for (disc in discapacidades) {
+  
+  df_k <- split_data[[disc]]
+  
+  for (reg in regiones) {
+    
+    res_k <- das_gupta(
+      df = df_k,
+      ref_region = "Nacional",
+      cmp_region = reg
+    ) |> 
+      mutate(
+        discapacidad = disc,
+        region = reg
+      )
+    
+    resultados_list[[paste(disc, reg, sep = "_")]] <- res_k
+  }
+}
+
+resultados_dg <- dplyr::bind_rows(resultados_list)
+
+```
+
+```{r}
+resultados_dg |>
+  select(region, discapacidad, effect_heat, effect_age, effect_disability, total_diff) |>
+  arrange(discapacidad, region) |> 
+  gt()
+
+```
+
+
+### Por edad
+
+```{r}
+df_mov <- datos_decomp |> 
+  filter(discapacidad == "dis_mov")
+
+
+```
+
+```{r}
+
+das_gupta_by_age <- function(df, ref_region, cmp_region) {
+  
+  A <- df |> 
+    filter(region == ref_region) |> 
+    select(age5, s_A = s, d_A = d, h_A = h)
+
+  B <- df |> 
+    filter(region == cmp_region) |> 
+    select(age5, s_B = s, d_B = d, h_B = h)
+
+  numeric_cols <- c("s_A","d_A","h_A","s_B","d_B","h_B")
+
+  X <- full_join(A, B, by = "age5") |> 
+    mutate(
+      across(all_of(numeric_cols), ~as.numeric(as.character(.x))),
+      across(all_of(numeric_cols), ~replace_na(.x, 0))
+    )
+
+  tibble(
+    age5 = X$age5,
+    
+    effect_s_age = (X$s_B - X$s_A) *
+      (X$d_A * X$h_A + X$d_B * X$h_B) / 2,
+    
+    effect_d_age = (X$d_B - X$d_A) *
+      (X$s_A * X$h_A + X$s_B * X$h_B) / 2,
+    
+    effect_h_age = (X$h_B - X$h_A) *
+      (X$s_A * X$d_A + X$s_B * X$d_B) / 2
+  )
+}
+
+
+
+```
+
+
+```{r}
+
+res_ags_mov <- das_gupta_by_age(
+  df = df_mov,
+  ref_region = "Nacional",
+  cmp_region = "Aguascalientes"
+)
+
+
+```
+
+
+```{r}
+discapacidades <- unique(datos_decomp$discapacidad)
+
+resultados_age <- list()
+
+for (disc in discapacidades) {
+
+  df_k <- datos_decomp |> filter(discapacidad == disc)
+
+  resultados_age[[disc]] <- das_gupta_by_age(
+    df = df_k,
+    ref_region = "Nacional",
+    cmp_region = "Aguascalientes"
+  ) |> mutate(discapacidad = disc)
+}
+
+resultados_age_df <- bind_rows(resultados_age)
+
+```
+
+
+
+```{r}
+resultados_age_df |>
+  mutate(age5 = factor(age5, levels = age5_levels)) |>
+  arrange(discapacidad, age5) |>
+  gt() |>
+  tab_header(
+    title = "Das Gupta by age — Aguascalientes",
+    subtitle = "Separated by disability type"
+  ) |>
+  cols_label(
+    discapacidad = "Disability type",
+    age5 = "Age group",
+    effect_s_age = "Age effect",
+    effect_d_age = "Disability effect",
+    effect_h_age = "Heat effect"
+  ) |>
+  fmt_number(
+    columns = c(effect_s_age, effect_d_age, effect_h_age),
+    decimals = 6
+  )
+
+```
 
 ## Steepwise
 
@@ -1968,8 +2173,6 @@ horiuchi_results |>
 
 ```
 
-
-
 ```{r}
 tasa_nacional_horiuchi <- datos_decomp |> 
     filter(region == "Nacional") |> 
@@ -1981,7 +2184,86 @@ print(tasa_nacional_horiuchi)
 
 
 
+### dis, edad
+
+```{r}
+estado <- "Aguascalientes"   
+
+horiuchi_age_state <- horiuchi_df |>
+  dplyr::filter(region == estado) |>
+  dplyr::group_by(age5, discapacidad, component) |>
+  dplyr::summarise(
+    contribution = sum(contribution),
+    .groups = "drop"
+  ) |>
+  tidyr::pivot_wider(
+    names_from  = component,
+    values_from = contribution,
+    names_prefix = "effect_"
+  )
+
+horiuchi_age_state <- horiuchi_age_state |>
+  dplyr::mutate(
+    age5 = factor(age5, levels = age5_levels),
+    discapacidad = factor(
+      discapacidad,
+      levels = c("dis_mov", "dis_mult", "dis_otros")
+    )
+  ) |>
+  dplyr::arrange(discapacidad, age5)
+
+horiuchi_age_state |>
+  gt::gt() |>
+  gt::tab_header(
+    title = paste("Horiuchi decomposition by age —", estado),
+    subtitle = "Effects by age and disability type"
+  ) |>
+  gt::cols_label(
+    age5         = "Age group",
+    discapacidad = "Disability type",
+    effect_h     = "Heat effect (h)",
+    effect_s     = "Age effect (s)",
+    effect_d     = "Disability effect (d)"
+  ) |>
+  gt::fmt_number(
+    columns = c(effect_h, effect_s, effect_d),
+    decimals = 6
+  )
+
+
+
+
+
+```
+
 ## Tablas de cada método 
+Kitagawa 
+
+```{r}
+
+tabla_final <- kitagawa_vs_ref(
+  data        = datos[[1]],  # Solo popdis (discapacidad total/severa)
+  group_col   = "region",
+  stratum_col = "age5",      # ESTRUCTURA = edad
+  ref         = "Nacional",
+  rate_col    = "d",         # TASA = discapacidad
+  struct_col  = "s"          # ESTRUCTURA = proporción por edad
+) |> 
+  select(
+    Estado = region,
+    Tasa_Nacional = R_A,           # Tasa cruda nacional
+    Tasa_Estado = R_B,             # Tasa cruda del estado
+    Diferencia = diff_total,       # R_A - R_B
+    Efecto_Tasa = RE,              # Diferencia por tasas específicas
+    Efecto_Composicion = CE,       # Diferencia por estructura etaria
+    Pct_Efecto_Tasa = pct_RE,      # % explicado por tasa
+    Pct_Efecto_Composicion = pct_CE # % explicado por composición
+  )
+
+# Ver la tabla
+View(tabla_final)
+
+```
 
 # Gráficas \[Anterior\]
 
