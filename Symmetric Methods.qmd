@@ -7,37 +7,13 @@ editor_options:
   chunk_output_type: console
 ---
 
-# **From Kitagawa to Symmetric Methods**
+# **Symmetric Methods**
 
-Autores: Emerson (PI), Marcial y Caro
+Autores: Emerson (PI), Marcial y Carolina
 
 ## Introducción
 
-Este trabajo forma parte de un proyecto de investigación cuyo objetivo es analizar una doble vulnerabilidad frente al calor: la discapacidad y la vejez. Analíticamente, buscamos abordar una triple intersección entre tres dimensiones discapacidad (d), estructura por edad (s) y exposición al calor (h).
-
-![](Intersection.png){fig-align="center"}
-
-El propósito es identificar las diferencias regionales en la exposición al vivir el calor teniendo discapacidad, utilizando métodos de descomposición de tasas. En una primera etapa, aplicamos el método clásico de Kitagawa (1955) para examinar pares de componentes dentro de esta triple intersección:
-
--   estructura por edad y discapacidad (s–d),
-
--   estructura por edad y calor (s–h),
-
--   discapacidad y calor (d–h).
-
-Posteriormente, emplearemos métodos simétricos de descomposición (Das Gupta, Horiuchi, y Stepwise Replacement) para descomponer simultáneamente los tres componentes (s–d–h) y estimar la contribución de cada uno a las diferencias observadas entre regiones.
-
-Estructura analítica:
-
-1\. Tasa y composición
-
-1.1. Kitagawa: discapacidad (d) y estructura por edad (s)
-
-1.2. Kitagawa: calor (h) y estructura por edad (s)
-
-1.3. Kitagawa: calor (h) y discapacidad (d)
-
-2\. Métodos Simétricos: Das Gupta, Horiuchi y Stepwise Replacement
+Métodos simétricos de descomposición (Das Gupta, Horiuchi, y Stepwise Replacement) para descomponer simultáneamente los tres componentes (s–d–h) y estimar la contribución de cada uno a las diferencias observadas entre regiones.
 
 ## Paquetes
 
@@ -59,192 +35,13 @@ pacman::p_load(
     scales, # Format numbers in graphics
     knitr, # Integrate code and narrative inside documents
     gt,#  Produce professional-quality tables
-    
+    rlang, #
+    tibble, #
     # Data Viz
     ggplot2, patchwork,
     
     # For Spatial Data
     sf, ggmap, biscale)
-```
-
-## Funciones
-
-### Kitagawa generalizada
-
-Let $x$ index the stratification categories of any structurally relevant variable—age groups, educational levels, socioeconomic strata, household types, regions of residence, and so on.
-
-Let $G$ denote ny population or group for which we aim to compute and compare an aggregate rate.
-
-For each $(G, x)$pair, we define:
-
-1.  Size of the stratum
-
-$$\eta_x^{(G)} : \text{total number of units in structural category } x \text{ within group } G.$$
-
-2.  Structural weight of the stratum
-
-$$s_x^{(G)} = \frac{\eta_x^{(G)}}{\sum_x \eta_x^{(G)}}.$$
-
-3.  Stratum-specific rate
-
-$$r_x^{(G)} : \text{rate, proportion, or intensity associated with stratum } x.$$
-
-The overall rate of group $G$ is always a weighted average:
-
-$$R^{(G)} = \sum_x s_x^{(G)} \, r_x^{(G)}.$$
-
-Comparison between two populations
-
-Let $A$ and $B$ be any two groups. The total difference in overall rates is:
-
-$$\Delta R = R^{(A)} - R^{(B)}.$$
-
-The classical **Kitagawa (1955)** method separates these two sources of variation through an additive and symmetric decomposition:
-
-$$\Delta R = \sum_x \left(r_x^{(A)} - r_x^{(B)}\right) \frac{s_x^{(A)} + s_x^{(B)}}{2} + \sum_x \left(s_x^{(A)} - s_x^{(B)}\right) \frac{r_x^{(A)} + r_x^{(B)}}{2}.$$
-
-$$\underbrace{\sum_x \left(r_x^{(A)} - r_x^{(B)}\right) \frac{s_x^{(A)} + s_x^{(B)}}{2}}_{\text{Rate Effect (RE)}} + \underbrace{\sum_x \left(s_x^{(A)} - s_x^{(B)}\right) \frac{r_x^{(A)} + r_x^{(B)}}{2}}_{\text{Composition Effect (CE)}}.$$
-
-This total difference may arise from:
-
-1.  changes in the **stratum-specific rates**, capturing how much of the total difference is due to variation in the specific rates across strata while holding the structure fixed. This is the “pure” component reflecting changes in the risk or intensity of the outcome of interest.
-
-2.  changes in the **structural composition**, measuring the portion explained by differences in the group’s structure (age, education, region, etc.). Its generic interpretation is:
-
-    *“How much would the overall rate change if the groups shared the same structural composition but kept their own stratum-specific rates?”*
-
-### Función genérica
-
-\[Pendiente: Revisar y confirmar que los porcentajes o relativos tal como son calculados permiten la mejor interpretación\]
-
-```{r}
-#| label: Kitagawa 
-kitagawa_generic <- function(
-  data,
-  group_col, # ejemplo: "region"
-  stratum_col, # ejemplo: "age"
-  ref, # ejemplo: "Nacional"
-  cmp, # ejemplo: "Noreste"
-  rate_col = NULL, # ejemplo: "d"
-  struct_col = NULL, # ejemplo: "s"
-  return = c("summary","by_stratum","both") # qué devolver
-){
-  return <- match.arg(return)
-
-# Datos por grupo y estrato
-  df <- data |>
-    dplyr::select(
-      !!group_col := dplyr::all_of(group_col),
-      !!stratum_col := dplyr::all_of(stratum_col),
-      dplyr::all_of(c(rate_col, struct_col)) |> stats::na.omit()
-    )
-
-  # Extraemos A y B (ref y cmp)
-  A <- df |>
-    dplyr::filter(.data[[group_col]] == ref) |>
-    dplyr::select(
-      !!stratum_col := dplyr::all_of(stratum_col),
-      r_A = dplyr::all_of(rate_col),
-      s_A = dplyr::all_of(struct_col)
-    )
-
-  B <- df |>
-    dplyr::filter(.data[[group_col]] == cmp) |>
-    dplyr::select(
-      !!stratum_col := dplyr::all_of(stratum_col),
-      r_B = dplyr::all_of(rate_col),
-      s_B = dplyr::all_of(struct_col)
-    )
-
-  merged <- dplyr::full_join(A, B, by = stratum_col) |>
-    dplyr::mutate(dplyr::across(
-      .cols = c(r_A, r_B, s_A, s_B),
-      ~ tidyr::replace_na(.x, 0)
-    )) |>
-    dplyr::mutate(
-      C_rate = (r_A - r_B) * (s_A + s_B) / 2,
-      C_comp = (s_A - s_B) * (r_A + r_B) / 2,
-      cont_R_A = r_A * s_A,
-      cont_R_B = r_B * s_B
-    )
-
-  # Resumen global
-  summary_out <- merged |>
-    dplyr::summarise(
-      R_A = sum(cont_R_A, na.rm = TRUE),
-      R_B = sum(cont_R_B, na.rm = TRUE),
-      diff_total = R_A - R_B,
-      RE = sum(C_rate, na.rm = TRUE),
-      CE = sum(C_comp, na.rm = TRUE)) |>
-      ungroup() |> 
-    dplyr::mutate(
-      ref = ref,
-      cmp = cmp,
-      # Relativos
-      pct_RE = dplyr::if_else(
-          diff_total != 0, 100 * RE / diff_total, NA_real_),
-      pct_CE = dplyr::if_else(
-          diff_total != 0, 100 * CE / diff_total, NA_real_)
-    ) |>
-    dplyr::relocate(ref, cmp)
-
-  # Resumen por estrato
-  by_stratum_out <- merged |>
-      select(-r_A, -s_A, -r_B, -s_B) |> 
-      dplyr::mutate(
-      !!stratum_col := .data[[stratum_col]],
-      ref = ref,
-      cmp = cmp) |> 
-      group_by(cmp) |> 
-      mutate(
-      R_A = sum(cont_R_A, na.rm = TRUE),
-      R_B = sum(cont_R_B, na.rm = TRUE),
-      diff_total = R_A - R_B) |> 
-      ungroup() |> 
-      dplyr::mutate(
-      diff = cont_R_A - cont_R_B) |> 
-      rename(
-          RE = C_rate,
-          CE = C_comp) |> 
-      # Relativos
-      mutate(
-      pct_RE = dplyr::if_else(
-          diff != 0, 100 * RE / diff_total, NA_real_),
-      pct_CE = dplyr::if_else(
-          diff != 0, 100 * CE / diff_total, NA_real_),
-      pct_STRATUM = pct_RE+pct_CE
-      ) |> 
-      dplyr::relocate(ref, cmp)
-
-  # Opción de salida:
-  if (return == "summary") return(summary_out)
-  if (return == "by_stratum") return(by_stratum_out)
-  list(summary = summary_out, by_stratum = by_stratum_out)
-}
-```
-
-### Replicar Kitagawa vs referencia
-
-Esto permite un data.frame con los resúmenes de varios categorías (cmp) especificando solo una como referencia
-
-```{r}
-kitagawa_vs_ref <- function(
-  data, group_col, stratum_col, ref,
-  rate_col = NULL, struct_col = NULL,
-  return = c("summary","by_stratum","both")
-){
-    return <- match.arg(return)
-  grupos <- setdiff(unique(data[[group_col]]), ref)
-  purrr::map_dfr(grupos, \(g)
-    kitagawa_generic(
-      data, group_col, stratum_col, ref = ref, cmp = g,
-      rate_col = rate_col, struct_col = struct_col,
-      return = return
-    ) |>
-      dplyr::mutate(!!group_col := g)
-  ) |>
-    dplyr::relocate(dplyr::all_of(group_col), .after = cmp)
-}
 ```
 
 ## Datos
@@ -253,7 +50,11 @@ Cargamos base de datos de población y discapacidad
 
 ```{r}
 df <- read_excel("in/POP_UTCI_mun.xlsx")
+```
 
+We get the geometries for Mexican States for visualization. Additionally, we use the names of this object for df
+
+```{r}
 mapa <- sf::read_sf("in/mapa_ent_small.shp")
 
 df <- df |> 
@@ -261,8 +62,15 @@ df <- df |>
                   st_drop_geometry() |> 
                   select(cve_ent = CVE_ENT, NOMGEO),
               by = "cve_ent")
+```
 
+Some specifications are needed.
 
+1\) Disabilities observed
+
+2\) Region / Estates as comparison units
+
+```{r}
 # Nuevas categorías de discapacidad usadas
 df <- df |> 
     mutate(dis_mov = dis_caminar+dis_banarse,
@@ -274,677 +82,16 @@ df <- df |>
     rename(region = NOMGEO)
 ```
 
-## Resultados
+### Data aggregation
 
-### 1. Tasa y composición
-
-#### 1.1. Kitagawa: discapacidad (d) y vejez (s)
-
--   Medida de comparación: tasa de discapacidad = Σ(s·d)
-
-    -   *s*: distribución de la población por edad (estructura etaria).
-
-    -   *d*: prevalencia de discapacidad específica por edad.
-
-Esta parte del análisis permitirá identificar en qué medida las diferencias regionales en la tasa de discapacidad se deben a la estructura etaria o a la prevalencia específica por edad.
-
-##### Agregación en datos en dos componentes (s y d):
+Assuring independence, we aggregate data by age and disability type for each region/state.
 
 ```{r}
-age5_levels <-  c("0-4", "5-9", "10-14", "15-19", "20-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55-59", "60-64", "65-69", "70-74", "75-79", "80-84", "85+")
-
-
-discapacidades <- c(
-     "popdis",
-     "dis_mov",
-     "dis_mult",
-     "dis_otros")
-
-datos <- list()
-
-for (i in discapacidades) {
-    
-estatal <- df |>
-  group_by(region, age5) |>
-  summarise(
-    S = sum(pop, na.rm = TRUE),
-    D = sum(.data[[i]], na.rm = TRUE)
-  ) |> ungroup() |> 
-    group_by(region) |> 
-  mutate(
-    d = D / S, # tasa específica de discapacidad
-    s = S / sum(S, na.rm = TRUE)) |> # estructura etaria
-  ungroup()
-
-# Nacional
-nacional <- df |>
-  group_by(age5) |>
-  summarise(
-    S = sum(pop, na.rm = TRUE),
-    D = sum(.data[[i]], na.rm = TRUE)
-  ) |> ungroup() |> 
-  mutate(
-    region = "Nacional",
-    d = D / S,
-    s = S / sum(S, na.rm = TRUE))
-
-datos[[i]] <- bind_rows(estatal, nacional) |> 
-    mutate(discapacidad = i)
-
-}
-
-#datos[[1]] |> View()
-```
-
-#### Descomposición (s y d):
-
-Empezamos por ver discapcidad por edad
-
-```{r}
-# Comparar tasas de discapacidad (severa) Nacional vs Región
-resumen <- kitagawa_vs_ref(
-  data        = datos[[1]],
-  group_col   = "region",
-  stratum_col = "age5",
-  ref         = "Nacional",
-  rate_col    = "d",
-  struct_col  = "s"
-)
-
-resumen_edad <- kitagawa_vs_ref(
-  data        = datos[[1]],
-  group_col   = "region",
-  stratum_col = "age5",
-  ref         = "Nacional",
-  rate_col    = "d",
-  struct_col  = "s",
-  return  = "by_stratum"
-)
-```
-
-\[Pendiente: Replicar el for para obtener resultados de cada tipo de discapacidad (aunque está pendiente agrupar discapacidades)\]
-
-```{r}
-# Comparar tasas de discapacidad por tipo Nacional vs Región
-# Todos menos el primero 2:4
-resumen <- list()
-resumen_edad <- list()
-
-for (i in 1:4) {
-resumen[[i]] <- kitagawa_vs_ref(
-  data        = datos[[i]],
-  group_col   = "region",
-  stratum_col = "age5",
-  ref         = "Nacional",
-  rate_col    = "d",
-  struct_col  = "s") |> 
-    mutate(discapacidad = discapacidades[[i]])
-
-resumen_edad[[i]] <- kitagawa_vs_ref(
-  data        = datos[[i]],
-  group_col   = "region",
-  stratum_col = "age5",
-  ref         = "Nacional",
-  rate_col    = "d",
-  struct_col  = "s",
-  return  = "by_stratum") |> 
-    mutate(discapacidad = discapacidades[[i]])
-}
-
-resumen <- do.call(rbind, resumen)
-resumen_edad <- do.call(rbind, resumen_edad)
-```
-
-Plots
-
-```{r}
-resumen |>
-  tidyr::pivot_longer(c(RE, CE), 
-                      names_to = "effect_type",
-                      values_to = "value") |>
-  dplyr::mutate(
-    effect_type = dplyr::recode(
-        effect_type,
-        "RE" = "Efecto tasa (RE)",
-        "CE" = "Efecto composición (CE)")) |>
-    dplyr::mutate(
-    discapacidad = dplyr::recode(
-        discapacidad,
-        "popdis" = "Severe",
-        "dis_mov" = "Movilidad",
-        "dis_mult" = "Múltiple",
-        "dis_otros" = "Otros")) |>
-    filter(discapacidad != "Severe") |> 
-    group_by(region) |> 
-    mutate(sum_diff = sum(diff_total)) |> ungroup() |> 
-  ggplot(aes(x = value,
-             y = fct_reorder(region, sum_diff),
-             fill = discapacidad,
-             color = effect_type,
-             group = effect_type)) +
-    geom_col(position = "stack", alpha = .5,
-             linewidth = .5) +
-  labs(
-    x = "Contribución a ΔR (p.p.)", y = NULL,
-    #title = paste0("Nacional vs Region"),
-    subtitle = "Tipos de discapacidad",
-    fill = NULL, color = NULL
-  ) +
-     scale_fill_manual(values = c(
-        #"Severe" ="#4682B4",
-        "Movilidad"= "#7fc97f",
-        "Múltiple"= "#beaed4",
-        "Otros" = "#fdc086")) +
-     scale_color_manual(values = c(
-      "Efecto tasa (RE)" = "black",
-      "Efecto composición (CE)" = "red")) +
-    #facet_wrap(~discapacidad, ncol = 6)+
-    theme_bw()+
-    theme(legend.position = "bottom")
-
-resumen |>
-  tidyr::pivot_longer(c(RE, CE), 
-                      names_to = "effect_type",
-                      values_to = "value") |>
-  dplyr::mutate(
-    effect_type = dplyr::recode(
-        effect_type,
-        "RE" = "Efecto tasa (RE)",
-        "CE" = "Efecto composición (CE)")) |>
-    dplyr::mutate(
-    discapacidad = dplyr::recode(
-        discapacidad,
-        "popdis" = "Severe",
-        "dis_mov" = "Movilidad",
-        "dis_mult" = "Múltiple",
-        "dis_otros" = "Otros")) |>
-    filter(discapacidad == "Severe") |> 
-    group_by(region) |> 
-    mutate(sum_diff = sum(diff_total)) |> ungroup() |> 
-  ggplot(aes(x = value,
-             y = fct_reorder(region, sum_diff),
-             #fill = discapacidad,
-             color = effect_type,
-             group = effect_type)) +
-    geom_col(position = "stack", fill = "white") +
-    scale_color_manual(values = c(
-      "Efecto tasa (RE)" = "black",
-      "Efecto composición (CE)" = "red")) +
-  labs(
-    x = "Contribución a ΔR (p.p.)", y = NULL,
-    #title = paste0("Nacional vs Region"),
-    subtitle = "Discapacidad severa",
-    fill = NULL,
-    color = NULL) +
-    #facet_wrap(~discapacidad, ncol = 6)+
-    theme_bw()+
-    theme(legend.position = "bottom")
-```
-
-**Por edad**
-
-```{r}
-plot_edad_dis <- resumen_edad |>
-  tidyr::pivot_longer(c(RE, CE), 
-                      names_to = "effect_type",
-                      values_to = "value") |>
-  dplyr::mutate(
-    effect_type = dplyr::recode(
-        effect_type,
-        "RE" = "Efecto tasa (RE)",
-        "CE" = "Efecto composición (CE)")) |>
-    dplyr::mutate(
-    discapacidad = dplyr::recode(
-        discapacidad,
-        "popdis" = "Severe",
-        "dis_mov" = "Movilidad",
-        "dis_mult" = "Múltiple",
-        "dis_otros" = "Otros")) |>
-    mutate(age5 = factor(age5, c("0-4", "5-9", "10-14", "15-19", "20-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55-59", "60-64", "65-69", "70-74", "75-79", "80-84", "85+"))) |> 
-    filter(discapacidad != "Severe") |> 
-    group_by(region) |> 
-    mutate(sum_diff = sum(diff_total)) |> ungroup() |> 
-  ggplot(aes(x = value,
-             y = age5,
-             fill = discapacidad,
-             color = effect_type,
-             group = effect_type)) +
-    geom_col(position = "stack") +
-  labs(
-    x = "Contribución a ΔR (p.p.)", y = NULL,
-    #title = paste0("Nacional vs Region"),
-    subtitle = "Tipos de discapacidad",
-    fill = NULL, color = NULL) +
-     scale_fill_manual(values = c(
-        #"Severe" ="#4682B4",
-        "Movilidad"= "#7fc97f",
-        "Múltiple"= "#beaed4",
-        "Otros" = "#fdc086")) +
-     scale_color_manual(values = c(
-      "Efecto tasa (RE)" = "black",
-      "Efecto composición (CE)" = "red")) +
-    facet_wrap(~fct_reorder(region, sum_diff),
-               ncol = 4)+
-    theme_bw()+
-    theme(legend.position = "bottom")
-
-plot_edad_dis
-
-
-plot_edad <- resumen_edad |>
-  tidyr::pivot_longer(c(RE, CE), 
-                      names_to = "effect_type",
-                      values_to = "value") |>
-  dplyr::mutate(
-    effect_type = dplyr::recode(
-        effect_type,
-        "RE" = "Efecto tasa (RE)",
-        "CE" = "Efecto composición (CE)")) |>
-    dplyr::mutate(
-    discapacidad = dplyr::recode(
-        discapacidad,
-        "popdis" = "Severe",
-        "dis_mov" = "Movilidad",
-        "dis_mult" = "Múltiple",
-        "dis_otros" = "Otros")) |>
-    mutate(age5 = factor(age5, c("0-4", "5-9", "10-14", "15-19", "20-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55-59", "60-64", "65-69", "70-74", "75-79", "80-84", "85+"))) |> 
-    filter(discapacidad == "Severe") |> 
-    group_by(region) |> 
-    mutate(sum_diff = sum(diff_total)) |> ungroup() |> 
-  ggplot(aes(x = value,
-             y = age5,
-             color = effect_type,
-             group = effect_type)) +
-    geom_col(position = "stack", fill = "white") +
-  labs(
-    x = NULL, y = NULL,
-    #title = paste0("Nacional vs Region"),
-    subtitle = "Discapacidad Severa",
-    fill = NULL, color = NULL) +
-     scale_color_manual(values = c(
-      "Efecto tasa (RE)" = "black",
-      "Efecto composición (CE)" = "red")) +
-    facet_wrap(~fct_reorder(region, sum_diff),
-               ncol = 4)+
-    theme_bw()+
-    theme(legend.position = "bottom")
-plot_edad
-#plot_edad/plot_edad_dis
-```
-
-#### 1.2. Kitagawa: calor (h) y vejez (s)
-
--   Medida de comparación: proporción de días de calor = Σ(s·h).
-
-    -   *s*: estructura por edad.
-
-    -   *h*: número promedio de días de calor extremo por edad, agregados a nivel regional con datos municipales.
-
-Con ello se busca estimar cuánto de la exposición promedio al calor se explica por diferencias en la composición etaria regional.
-
-##### Agregación en datos en dos componentes (s y h):
-
-```{r}
-# Estados
-estatal <- df |>
-  group_by(region, age5) |>
-  summarise(
-    S = sum(pop*366, na.rm = TRUE), # En días-persona
-    H = sum(pop*heatdays, na.rm = TRUE), # En días-persona
-    ) |> ungroup() |> 
-    group_by(region) |> 
-  mutate(
-    h = H / S, # proporción específica de días calor
-    s = S / sum(S, na.rm = TRUE)) |> # estructura etaria
-    # Solo para ver los días al año recurrimos a esta ponderación
-  mutate(heat_days = sum(h*s)*366) |> 
-    ungroup() 
-    
-
-# Nacional
-nacional <- df |>
-    group_by(age5) |>
-  summarise(
-    S = sum(pop*366, na.rm = TRUE), # En días-persona
-    H = sum(pop*heatdays, na.rm = TRUE), # En días-persona
-    ) |> ungroup() |> 
-  mutate(
-    h = H / S, # proporción específica de días calor
-    s = S / sum(S, na.rm = TRUE)) |> # estructura etaria
-    # Días al año
-  mutate(region = "Nacional",
-         heat_days = sum(h*s)*366)
-
-datos <- bind_rows(estatal, nacional)
-```
-
-#### Descomposición s y h
-
-```{r}
-# Comparar proporcio de dias de calor Nacional vs Región
-resumen <- kitagawa_vs_ref(
-  data        = datos,
-  group_col   = "region",
-  stratum_col = "age5",
-  ref         = "Nacional",
-  rate_col    = "h",
-  struct_col  = "s"
-)
-
-resumen_edad <- kitagawa_vs_ref(
-  data        = datos,
-  group_col   = "region",
-  stratum_col = "age5",
-  ref         = "Nacional",
-  rate_col    = "h",
-  struct_col  = "s",
-  return  = "by_stratum"
-)
-```
-
-Comentarios:
-
-Plots:
-
-```{r}
-resumen |>
-  tidyr::pivot_longer(c(RE, CE), 
-                      names_to = "effect_type",
-                      values_to = "value") |>
-  dplyr::mutate(
-    effect_type = dplyr::recode(
-        effect_type,
-        "RE" = "Efecto tasa (RE)",
-        "CE" = "Efecto composición (CE)")) |>
-    group_by(region) |> 
-    mutate(sum_diff = sum(diff_total)) |> ungroup() |> 
-  ggplot(aes(x = value,
-             y = fct_reorder(region, sum_diff),
-             color = effect_type,
-             group = effect_type)) +
-    geom_col(position = "stack", fill = "white") +
-    scale_color_manual(values = c(
-      "Efecto tasa (RE)" = "black",
-      "Efecto composición (CE)" = "red")) +
-  labs(
-    x = "Contribución a ΔR (p.p.)", y = NULL,
-    #title = paste0("Nacional vs Region"),
-    subtitle = "Calor y discapacidad",
-    fill = NULL, color = NULL) +
-    #facet_wrap(~discapacidad, ncol = 6)+
-    theme_bw()+
-    theme(legend.position = "bottom")
-```
-
-Por edad
-
-```{r}
-resumen_edad |>
-  tidyr::pivot_longer(c(RE, CE), 
-                      names_to = "effect_type",
-                      values_to = "value") |>
-  dplyr::mutate(
-    effect_type = dplyr::recode(
-        effect_type,
-        "RE" = "Efecto tasa (RE)",
-        "CE" = "Efecto composición (CE)")) |>
-    mutate(age5 = factor(age5, c("0-4", "5-9", "10-14", "15-19", "20-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55-59", "60-64", "65-69", "70-74", "75-79", "80-84", "85+"))) |> 
-    group_by(region) |> 
-    mutate(sum_diff = sum(diff_total)) |> ungroup() |> 
-  ggplot(aes(x = value,
-             y = age5,
-             color = effect_type,
-             group = effect_type)) +
-    geom_col(position = "stack", fill = "white") +
-  labs(
-    x = "Contribución a ΔR (p.p.)", y = NULL,
-    #title = paste0("Nacional vs Region"),
-    subtitle = "Discapacidad Severa",
-    fill = NULL, color = NULL) +
-     scale_color_manual(values = c(
-      "Efecto tasa (RE)" = "black",
-      "Efecto composición (CE)" = "red")) +
-    facet_wrap(~fct_reorder(region, sum_diff),
-               ncol = 4)+
-    theme_bw()+
-    theme(legend.position = "bottom")
-```
-
-#### 1.3. Kitagawa: calor (h) y discapacidad (d)
-
--   Medida de comparación: proporción de días de calor = Σ(d·h)
-
-    -   *d*: estructura de la población según discapacidad (dos categorías: con y sin discapacidad).
-
-    -   *h*: días de calor promedio para cada categoría, agregados a nivel regional.
-
-Este análisis permitirá observar si las regiones con mayor exposición térmica de personas con discapacidad lo deben principalmente a la frecuencia del calor o a la distribución de dicha población.
-
-##### Agregación en datos en dos componentes (d y h):
-
-```{r}
-# Formato long
-df_long <- df |> 
-    mutate(popnodis = pop-popdis) |> 
-    select(-pop) |> 
-    pivot_longer(
-        cols = c(
-            "popnodis", "dis_mov","dis_mult","dis_otros"),
-        names_to = "dis",
-        values_to = "pop")
-
-# Estados
-estatal <- df_long |>
-  group_by(region, dis) |>
-  summarise(
-    D = sum(pop*366, na.rm = TRUE), # En días-persona
-    H = sum(pop*heatdays, na.rm = TRUE), # En días-persona
-    ) |> ungroup() |> 
-    group_by(region) |> 
-  mutate(
-    h = H / D, # proporción específica de días calor
-    d = D / sum(D, na.rm = TRUE)) |> # estructura etaria
-    # Solo para ver los días al año recurrimos a esta ponderación
-  mutate(heat_days = sum(h*d)*366) |> 
-    ungroup() 
-    
-
-# Nacional
-nacional <- df_long |>
-    group_by(dis) |>
-  summarise(
-    D = sum(pop*366, na.rm = TRUE), # En días-persona
-    H = sum(pop*heatdays, na.rm = TRUE), # En días-persona
-    ) |> ungroup() |> 
-  mutate(
-    h = H / D, # proporción específica de días calor
-    d = D / sum(D, na.rm = TRUE)) |> # estructura de discapacidad
-    # Días al año
-  mutate(region = "Nacional",
-         heat_days = sum(h*d)*366)
-
-datos <- bind_rows(estatal, nacional)
-```
-
-#### Descomposición d y h
-
-```{r}
-# Comparar proporcio de dias de calor Nacional vs Región
-resumen <- kitagawa_vs_ref(
-  data        = datos,
-  group_col   = "region",
-  stratum_col = "dis",
-  ref         = "Nacional",
-  rate_col    = "h",
-  struct_col  = "d"
-)
-
-resumen_discapacidad <- kitagawa_vs_ref(
-  data        = datos,
-  group_col   = "region",
-  stratum_col = "dis",
-  ref         = "Nacional",
-  rate_col    = "h",
-  struct_col  = "d",
-  return  = "by_stratum"
-)
-```
-
-Comentarios:
-
-Plots
-
-```{r}
-resumen |>
-  tidyr::pivot_longer(c(RE, CE), 
-                      names_to = "effect_type",
-                      values_to = "value") |>
-  dplyr::mutate(
-    effect_type = dplyr::recode(
-        effect_type,
-        "RE" = "Efecto tasa (RE)",
-        "CE" = "Efecto composición (CE)")) |>
-    group_by(region) |> 
-    mutate(sum_diff = sum(diff_total)) |> ungroup() |> 
-  ggplot(aes(x = value,
-             y = fct_reorder(region, sum_diff),
-             #fill = discapacidad,
-             color = effect_type,
-             group = effect_type)) +
-    geom_col(position = "stack", fill = "white") +
-    scale_color_manual(values = c(
-      "Efecto tasa (RE)" = "black",
-      "Efecto composición (CE)" = "red")) +
-  labs(
-    x = "Contribución a ΔR (p.p.)", y = NULL,
-    #title = paste0("Nacional vs Region"),
-    subtitle = "Calor y Discapacidad (Estructura)",
-    fill = NULL,
-    color = NULL) +
-    #facet_wrap(~discapacidad, ncol = 6)+
-    theme_bw()+
-    theme(legend.position = "bottom")
-```
-
-Por estructura
-
-```{r}
-resumen_discapacidad |>
-  tidyr::pivot_longer(c(RE, CE), 
-                      names_to = "effect_type",
-                      values_to = "value") |>
-  dplyr::mutate(
-    effect_type = dplyr::recode(
-        effect_type,
-        "RE" = "Efecto tasa (RE)",
-        "CE" = "Efecto composición (CE)")) |>
-    dplyr::mutate(
-    dis = dplyr::recode(
-        dis,
-        #"popdis" = "Severe",
-        "popnodis" = "Sin Discapacidad",
-        "dis_mov" = "Movilidad",
-        "dis_mult" = "Múltiple",
-        "dis_otros" = "Otros")) |>
-    group_by(region) |> 
-    mutate(sum_diff = sum(diff_total)) |> ungroup() |>
-    filter(dis != "Sin Discapacidad") |> 
-  ggplot(aes(x = value,
-             y = fct_reorder(dis, value),
-             color = effect_type,
-             group = effect_type)) +
-    geom_col(position = "stack", fill = "white") +
-  labs(
-    x = NULL, y = NULL,
-    #title = paste0("Nacional vs Region"),
-    subtitle = "Discapacidad Severa",
-    fill = NULL, color = NULL) +
-     scale_color_manual(values = c(
-      "Efecto tasa (RE)" = "black",
-      "Efecto composición (CE)" = "red")) +
-    facet_wrap(~fct_reorder(region, sum_diff),
-               ncol = 2)+
-    theme_void()+
-    theme(legend.position = "bottom")
-```
-
-### 2. Métodos Simétricos: Das Gupta, Horiuchi, Stepwise Replacement
-
-En una segunda etapa se aplicarán métodos simétricos de descomposición, capaces de manejar tres componentes simultáneamente (s–d–h).
-
-El objetivo es desagregar las diferencias regionales totales en la exposición al calor de personas con discapacidad según las contribuciones de:
-
--   La estructura etaria (s),
-
--   La prevalencia de discapacidad (d),
-
--   La intensidad o frecuencia de días de calor (h).
-
--   …
-
-Se prevé incorporar en etapas posteriores la descomposición por tipo de discapacidad y sexo extendiendo así el análisis multidimensional de vulnerabilidad.
-
-```{r}
- discapacidades <- c(
-     "popdis",
-     "dis_mov",
-     "dis_mult",
-     "dis_otros")
-
-datos <- list()
-
-for (i in discapacidades) {
-    
-estatal <- df |>
-  group_by(region, age5) |>
-  summarise(
-    S = sum(pop*366, na.rm = TRUE), # En días-persona
-    D = sum(.data[[i]]*366, na.rm = TRUE), # En días-persona
-    H = sum(pop*heatdays, na.rm = TRUE), # Días de calor CON DISCAPACIDAD
-  ) |> ungroup() |> 
-    group_by(region) |> 
-  mutate(
-      s = S / sum(S, na.rm = TRUE), # Estructura de edad
-    d = D / S, # Tasa específica de discapacidad
-    h = H / S) |> # Días de calor CON DISCAPACIDAD
-    mutate(heatdays = sum(d*s*h)*366) |> 
-  ungroup()
-
-# Nacional
-nacional <- df |>
-  group_by(age5) |>
-  summarise(
-    S = sum(pop*366, na.rm = TRUE), # En días-persona
-    D = sum(.data[[i]]*366, na.rm = TRUE), # En días-persona
-    H = sum(pop*heatdays, na.rm = TRUE), # Días de calor CON DISCAPACIDAD
-  ) |> ungroup() |> 
-  mutate(
-    region = "Nacional",
-    s = S / sum(S, na.rm = TRUE), # Estructura de edad
-    d = D / S, # Tasa específica de discapacidad
-    h = H / S
-) |> # Días de calor CON DISCAPACIDAD
-    mutate(heatdays = sum(d*s*h)*366) |> 
-    ungroup()
-
-datos[[i]] <- bind_rows(estatal, nacional) |> 
-    mutate(discapacidad = i)
-
-}
-
-datos <-  do.call(rbind, datos)
-datos <- datos |> 
-      mutate(age5 = factor(age5, c("0-4", "5-9", "10-14", "15-19", "20-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55-59", "60-64", "65-69", "70-74", "75-79", "80-84", "85+")))
-```
-
-Asegurando independencia
-
-```{r}
-discapacidades <- c(
-  "popdis",
-  "dis_mov",
-  "dis_mult",
-  "dis_otros")
+discapacidades <- c("popdis",
+                    "dis_mov",
+                    "dis_mult",
+                    "dis_otros")
+  
 
 age5_levels <- c(
   "0-4", "5-9", "10-14", "15-19", "20-24",
@@ -1013,9 +160,7 @@ for (i in discapacidades) {
       exposure = sum(d * s * h * 100, na.rm = TRUE)
     ) |>
     ungroup() |>
-    mutate(
-      discapacidad = i
-    )
+    mutate(discapacidad = i)
   
   ## Guardamos estatal + nacional para este tipo de discapacidad
   datos[[i]] <- bind_rows(estatal, nacional)
@@ -1026,88 +171,6 @@ datos <- do.call(rbind, datos) |>
   mutate(
     age5 = factor(age5, levels = age5_levels)
   )
-```
-
-```{r}
-# 1. Proporción del total de dias-persona por edad
-datos |> 
-    ggplot()+
-    aes(x = s, y = age5,
-        color = discapacidad, group = discapacidad)+
-    geom_line(orientation = "y")+
-    facet_wrap(~region)
-# Las diferencias son las mismas por 
-
-# 2. Proporción de días-persona de calor por edad
-datos |> 
-    ggplot()+
-    aes(x = h, y = age5,
-        color = discapacidad, group = discapacidad)+
-    geom_line(orientation = "y")+
-    facet_wrap(~region)
-
-# 2. Prevalencia de discapacidad por edad + tipo de discapacidad
-datos |> 
-    filter(discapacidad != "popdis") |> 
-    ggplot()+
-    aes(x = d, y = age5,
-        fill = discapacidad, group = discapacidad)+
-    geom_area(orientation = "y")+
-    geom_line(data = datos |> 
-                  filter(discapacidad == "popdis"),
-              color = "black",
-              orientation = "y")+
-    facet_wrap(~region)
-
-
-# Tasas de calor (s*h) específicas por edad
-datos |> 
-    #filter(discapacidad != "popdis") |> 
-    ggplot()+
-    aes(y = age5,
-        color = discapacidad, group = discapacidad)+
-    geom_line(aes(x = s*h), orientation = "y")+
-    geom_line(aes(x = s), orientation = "y",
-              color = "red")+
-    facet_wrap(~region)
-
-# Tasas de discapacidad (s*d) específicas por edad
-datos |> 
-    #filter(discapacidad != "popdis") |> 
-    ggplot()+
-    aes(y = age5,
-        color = discapacidad, group = discapacidad)+
-    geom_line(aes(x = s*d), orientation = "y")+
-    geom_line(aes(x = s), orientation = "y",
-              color = "red")+
-    facet_wrap(~region)
-
-datos |> 
-    filter(discapacidad != "popdis") |> 
-    ggplot()+
-    aes(x = s*d, y = age5,
-        fill = discapacidad, group = discapacidad)+
-    geom_area(orientation = "y")+
-    geom_line(data = datos |> 
-                  filter(discapacidad == "popdis"),
-              color = "black",
-              orientation = "y")+
-    facet_wrap(~region)
-
-datos |> 
-    filter(discapacidad != "popdis") |> 
-    ggplot()+
-    aes(x = h*d, y = age5,
-        fill = discapacidad, group = discapacidad)+
-    geom_area(orientation = "y")+
-    geom_line(data = datos |> 
-                  filter(discapacidad == "popdis"),
-              color = "black",
-              orientation = "y")+
-    facet_wrap(~region)
-```
-
-```{r}
 #Exposición al calor con discapcidad por edad?
 datos <- datos |> 
     mutate(specific_exp = s*d*h*100)
@@ -1119,26 +182,24 @@ datos_decomp <- datos |>
     mutate(exposure = sum(
         specific_exp, na.rm = T)) |> 
     ungroup()
-
-datos_decomp |> 
-    ggplot()+
-    #Multiplicamos x 18 que es el numero de grupos de edad para alcanzar un valor similar al resumen total pero por grupo de edad
-    aes(x = specific_exp*18, y = age5,
-        fill = discapacidad,
-        group = interaction(
-            discapacidad, region))+
-
-    geom_area(orientation = "y", color = "black")+
-    #geom_col(position = "stack",
-    #         color = "black", linewidth = .3)+
-    geom_vline(aes(xintercept = exposure))+
-    scale_fill_brewer(type = "qual",
-                      palette = 1)+
-    facet_wrap(~fct_reorder(region, exposure), 
-               nrow = 6) +
-    theme_bw()+
-    theme(legend.position = "bottom")
 ```
+
+## Results
+
+Definimos la categoría de referencia para la comparación
+
+```{r}
+regiones <- names(table(datos_decomp$region))
+
+ref <- regiones[18] # Nacional como referencia
+regiones <- regiones[-18]
+
+# Cambiar cuando se ven regiones
+#ref <- regiones[3] # Nacional como referencia
+#regiones <- regiones[-3]
+```
+
+### Horiuchi
 
 ```{r}
 exposure_fun <- function(pars) {
@@ -1148,15 +209,6 @@ exposure_fun <- function(pars) {
   h <- pars[(2 * n + 1):(3 * n)]
   sum(d * s * h*100)
 }
-
-regiones <- names(table(datos_decomp$region))
-
-ref <- regiones[18] # Nacional como referencia
-regiones <- regiones[-18]
-
-# Cambiar cuando se ven regiones
-#ref <- regiones[3] # Nacional como referencia
-#regiones <- regiones[-3]
 
 # Lista de parámetros
 data_list <- split(datos_decomp,
@@ -1173,13 +225,10 @@ for (region in regiones) {
     pars1 = parameters[[ref]],
     pars2 = parameters[[region]],
     N = 6)
-    }
-```
+}
 
-```{r}
 ids <- datos_decomp %>%
   filter(region == ref) %>%
-  #arrange(age5, discapacidad) %>%
   mutate(id = paste0(age5, "__", discapacidad)) %>%
   pull(id)
 
@@ -1210,16 +259,126 @@ horiuchi_df <- purrr::imap_dfr(
     age5 = factor(age5, levels = age5_levels),
     discapacidad = factor(
         discapacidad,
-        levels = unique(datos_decomp$discapacidad)))
+        levels = discapacidades))
+```
+
+### Das Gupta
+
+```{r}
+source("R/das_gupta2.R")
+das_gupta_list <- list()
+for (region in regiones) {
+    das_gupta_list[[region]] <- das_gupta(
+        df = datos_decomp |> filter(
+            region %in% c(ref, region)),
+        ref = ref,
+        cmp = region,
+        region_var = region,
+        strata_vars = c("age5", "discapacidad"),
+        comp_vars = c("s", "d", "h"),
+        scale = 100)
+}
+
+# Extraemos las contribuciones globales
+global <- list()
+for (region in regiones) {
+    global[[region]] <- das_gupta_list[[region]]$global
+}
+global <- do.call(rbind, global) |> as.data.frame()
+
+# Extraemos las contribuciones por cada categoría estructural
+das_gupta_df <- list()
+for (region in regiones) {
+    das_gupta_df[[region]] <- das_gupta_list[[region]]$cell
+}
+das_gupta_df <- do.call(rbind, das_gupta_df) |>
+    as.data.frame() |>
+    mutate(discapacidad = factor(
+        discapacidad, levels = discapacidades))
 ```
 
 Contribuciones totales
 
 ```{r}
+das_gupta_df <- das_gupta_df |> 
+    arrange(cmp, age5, discapacidad, component)
+horiuchi_df <- horiuchi_df |> 
+    arrange(region, age5, discapacidad, component)
+
+# Calculamos la diferencia entre ambos
+das_gupta_df$effect-horiuchi_df$contribution
+hist(das_gupta_df$effect-horiuchi_df$contribution)
+
+das_gupta_df <- das_gupta_df |> 
+    mutate(diff = effect-horiuchi_df$contribution)
+
+das_gupta_df |> 
+    ggplot()+
+    geom_histogram(aes(x = diff)) +
+    facet_wrap(~component, ncol = 1)
+
+das_gupta_df |> 
+    ggplot()+
+    geom_histogram(aes(x = diff)) +
+    facet_wrap(~age5, ncol = 5)
+
+das_gupta_df |> 
+    ggplot()+
+    geom_histogram(aes(x = diff)) +
+    facet_wrap(~cmp, ncol = 6)
+
+das_gupta_df |> 
+    group_by(component) |> 
+    summarise(diff = mean(diff)) |> 
+    ungroup() |> 
+    ggplot()+
+    geom_col(aes(x = diff, y = component))
+
+das_gupta_df |> 
+    group_by(age5) |> 
+    summarise(diff = mean(diff)) |> 
+    ungroup() |> 
+    ggplot()+
+    geom_col(aes(x = diff, y = age5))
+
+das_gupta_df |> 
+    group_by(cmp) |> 
+    summarise(diff = mean(diff)) |> 
+    ungroup() |> 
+    ggplot()+
+    geom_col(aes(x = diff, y = cmp))
+
+
+
+# Observamos si hay diferencias totales sí sean iguales
+deltaR_diff <- das_gupta_df |> 
+    group_by(cmp) |> 
+    summarise(deltaR = sum(effect)) |> 
+    ungroup() |> 
+    mutate(deltaR_horiuchi = (horiuchi_df |> 
+               group_by(region) |> 
+    summarise(deltaR = sum(contribution)) |> 
+    ungroup() |> 
+        pull(deltaR)))
+
+deltaR_diff <- deltaR_diff |>
+    mutate(deltaR_diff = deltaR-deltaR_horiuchi) 
+
+deltaR_diff |> 
+    ggplot()+
+    geom_col(aes(x = deltaR_diff,
+                 y = fct_reorder(cmp,deltaR_diff)))
+```
+
+```{r}
+glimpse(das_gupta_df)
+glimpse(horiuchi_df)
+
+
+
+
 # Proportions or rates. What are we comparing?
-global_results <- 
-    cbind(
-datos_decomp |> 
+global_results <- cbind(datos_decomp |> 
     group_by(region) |> 
     summarise(ref_exposure = unique(exposure)) |> 
     ungroup() |> 
@@ -1253,7 +412,11 @@ global_results|>
     summarise(sd = sd(total_contribution),
               total_contribution = sum(total_contribution))
 
+```
 
+PLOTS
+
+```{r}
 component_plot <- global_results |> 
     ggplot()+
     aes(x = prop_contribution,
@@ -2116,15 +1279,12 @@ effects_horiuchi <- horiuchi_df |>
 exposure_table <- datos_decomp |>
   group_by(region) |>
   summarise(exposure_total = unique(exposure))
-
 ```
 
 ```{r}
-
 ref_rate <- exposure_table |>
   filter(region == "Nacional") |>
   pull(exposure_total)
-
 ```
 
 ```{r}
@@ -2133,9 +1293,7 @@ horiuchi_results <- exposure_table |>
   left_join(effects_horiuchi, by = "region") |>
   mutate(
     total_effects = effect_s + effect_d + effect_h,
-    total_diff = exposure_total - ref_rate
-  )
-
+    total_diff = exposure_total - ref_rate)
 ```
 
 ```{r}
@@ -2144,6 +1302,7 @@ horiuchi_results <- horiuchi_results |>
     region = factor(region, levels = orden_estados)
   ) |>
   dplyr::arrange(region)
+
 horiuchi_results |> 
   dplyr::select(
     region,
