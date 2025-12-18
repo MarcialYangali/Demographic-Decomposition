@@ -1852,7 +1852,7 @@ for (disc in discapacidades) {
   res_k <- das_gupta(
     df = df_k,
     ref_region = "Nacional",
-    cmp_region = "Aguascalientes"   # o un loop para todos
+    cmp_region = "Aguascalientes"   
   ) |> 
     mutate(discapacidad = disc)
   
@@ -1871,7 +1871,7 @@ for (disc in discapacidades) {
   
   for (reg in regiones) {
     
-    res_k <- das_gupta_threeway(
+    res_k <- das_gupta(
       df = df_k,
       ref_region = "Nacional",
       cmp_region = reg
@@ -1891,7 +1891,6 @@ resultados_dg <- bind_rows(resultados_list)
 ```
 
 ```{r}
-
 discapacidades <- unique(datos_decomp$discapacidad)
 split_data <- split(datos_decomp, datos_decomp$discapacidad)
 
@@ -1929,7 +1928,6 @@ resultados_dg |>
   select(region, discapacidad, effect_heat, effect_age, effect_disability, total_diff) |>
   arrange(discapacidad, region) |> 
   gt()
-
 ```
 
 ### Por edad
@@ -1937,8 +1935,6 @@ resultados_dg |>
 ```{r}
 df_mov <- datos_decomp |> 
   filter(discapacidad == "dis_mov")
-
-
 ```
 
 ```{r}
