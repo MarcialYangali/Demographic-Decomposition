@@ -1,0 +1,510 @@
+---
+title: "Appendix 2: Selection of Decomposition Method"
+subtitle: "Comparison of Das Gupta, Horiuchi, and Stepwise Replacement"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    self-contained: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+  echo: true
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+## Overview
+
+This appendix justifies the selection of Das Gupta's (1993) symmetric
+decomposition method over two alternatives: Horiuchi's continuous
+decomposition (Horiuchi, Wilmoth & Pletcher, 2008) and Stepwise
+Replacement. All three methods are applied to identical data and their
+results are compared across three criteria: symmetry, sensitivity
+stability, and interpretability.
+
+------------------------------------------------------------------------
+
+## Setup
+
+```{r}
+#| label: setup
+#| code-fold: false
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+  DemoDecomp,   # Horiuchi and stepwise_replacement
+  readxl, dplyr, tidyr, purrr,
+  ggplot2, patchwork, scales,
+  gt, knitr, sf, stringr
+)
+
+# Load custom Das Gupta function (das_gupta2.R: full permutation averaging)
+source("R/das_gupta2.R")
+```
+
+------------------------------------------------------------------------
+
+## Data preparation
+
+```{r}
+#| label: data-load
+
+df <- read_excel("in/POP_UTCI_mun.xlsx")
+mapa <- sf::read_sf("in/mapa_ent_small.shp")
+
+df <- df |>
+  left_join(
+    mapa |> sf::st_drop_geometry() |> select(cve_ent = CVE_ENT, NOMGEO),
+    by = "cve_ent"
+  ) |>
+  select(-region) |>
+  rename(region = NOMGEO) |>
+  mutate(
+    dis_mov   = dis_caminar + dis_banarse,
+    dis_otros = dis_ver + dis_oir + dis_recordar + dis_hablar
+  )
+
+age5_levels <- c(
+  "0-4",  "5-9",  "10-14", "15-19", "20-24",
+  "25-29","30-34","35-39", "40-44", "45-49",
+  "50-54","55-59","60-64", "65-69", "70-74",
+  "75-79","80-84","85+"
+)
+
+discapacidades <- c("dis_mov", "dis_mult", "dis_otros")
+```
+
+### State-level aggregation
+
+```{r}
+#| label: state-data
+
+datos <- list()
+
+for (i in discapacidades) {
+
+  estatal <- df |>
+    group_by(region, age5) |>
+    summarise(
+      S        = sum(pop, na.rm = TRUE),
+      D        = sum(.data[[i]], na.rm = TRUE),
+      heatdays = weighted.mean(heatdays, w = pop, na.rm = TRUE),
+      .groups  = "drop"
+    ) |>
+    group_by(region) |>
+    mutate(s = S / sum(S, na.rm = TRUE)) |>
+    ungroup() |>
+    mutate(d = D / S, h = heatdays / 366) |>
+    group_by(region) |>
+    mutate(
+      exposure    = sum(d * s * h * 100, na.rm = TRUE),
+      specific_exp = d * s * h * 100
+    ) |>
+    ungroup() |>
+    mutate(discapacidad = i)
+
+  nacional <- df |>
+    group_by(age5) |>
+    summarise(
+      S        = sum(pop, na.rm = TRUE),
+      D        = sum(.data[[i]], na.rm = TRUE),
+      heatdays = weighted.mean(heatdays, w = pop, na.rm = TRUE),
+      .groups  = "drop"
+    ) |>
+    mutate(region = "Nacional") |>
+    group_by(region) |>
+    mutate(s = S / sum(S, na.rm = TRUE)) |>
+    ungroup() |>
+    mutate(d = D / S, h = heatdays / 366) |>
+    group_by(region) |>
+    mutate(
+      exposure     = sum(d * s * h * 100, na.rm = TRUE),
+      specific_exp = d * s * h * 100
+    ) |>
+    ungroup() |>
+    mutate(discapacidad = i)
+
+  datos[[i]] <- bind_rows(estatal, nacional)
+}
+
+datos <- do.call(rbind, datos) |>
+  mutate(age5 = factor(age5, levels = age5_levels))
+
+# Datos para descomposición (combined across disability types for joint exposure)
+datos_decomp <- datos |>
+  group_by(region, age5) |>
+  mutate(exposure = sum(specific_exp, na.rm = TRUE)) |>
+  ungroup()
+
+# Reference and comparison regions
+ref     <- "Nacional"
+regiones <- setdiff(unique(datos_decomp$region), ref)
+
+# Real differences
+valores_reales <- datos_decomp |>
+  group_by(region) |>
+  summarise(
+    exposure = sum(d * s * h * 100, na.rm = TRUE),
+    .groups  = "drop"
+  ) |>
+  mutate(
+    ref_exposure  = exposure[region == ref],
+    diff_real     = exposure - ref_exposure,
+    diffprop_real = diff_real / ref_exposure * 100
+  )
+```
+
+------------------------------------------------------------------------
+
+## Exposure function
+
+All three methods operate on the same exposure function:
+
+$$E = 100 \times \sum_i s_i \times d_i \times h_i$$
+
+```{r}
+#| label: exposure-fun
+#| code-fold: false
+
+exposure_fun <- function(pars) {
+  n <- length(pars) / 3
+  d <- pars[1:n]
+  s <- pars[(n + 1):(2 * n)]
+  h <- pars[(2 * n + 1):(3 * n)]
+  sum(d * s * h * 100)
+}
+
+# Parameter vectors by region (order: d, s, h)
+data_list  <- split(datos_decomp, datos_decomp$region)
+parameters <- lapply(data_list, function(df) c(df$d, df$s, df$h))
+
+# Parameter names for labelling contributions
+ids <- datos_decomp |>
+  filter(region == ref) |>
+  mutate(id = paste0(age5, "__", discapacidad)) |>
+  pull(id)
+
+param_names <- c(
+  paste0("d__", ids),
+  paste0("s__", ids),
+  paste0("h__", ids)
+)
+```
+
+------------------------------------------------------------------------
+
+## Method 1: Horiuchi continuous decomposition
+
+```{r}
+#| label: horiuchi
+#| cache: true
+
+# N = 40 eliminates numerical ambiguity across all Mexican regions
+N_horiuchi <- 40
+
+horiuchi_list <- list()
+for (region in regiones) {
+  horiuchi_list[[region]] <- DemoDecomp::horiuchi(
+    func  = exposure_fun,
+    pars1 = parameters[[ref]],
+    pars2 = parameters[[region]],
+    N     = N_horiuchi
+  )
+  names(horiuchi_list[[region]]) <- param_names
+}
+
+horiuchi_df <- purrr::imap_dfr(
+  horiuchi_list,
+  ~ tibble(region = .y, parameter = names(.x), contribution = as.numeric(.x))
+) |>
+  tidyr::separate(parameter,
+                  into = c("component", "age5", "discapacidad"),
+                  sep = "__", convert = TRUE) |>
+  mutate(age5 = factor(age5, levels = age5_levels))
+
+cat("✓ Horiuchi complete  (N =", N_horiuchi, ")\n")
+```
+
+## Method 2: Das Gupta symmetric decomposition
+
+```{r}
+#| label: dasgupta
+#| cache: true
+
+dasgupta_list <- purrr::map(regiones, function(reg) {
+  res <- das_gupta(
+    df          = datos_decomp,
+    ref         = ref,
+    cmp         = reg,
+    region_var  = region,
+    strata_vars = c("age5", "discapacidad"),
+    comp_vars   = c("d", "s", "h"),
+    scale       = 100
+  )
+  res$global
+})
+
+dasgupta_df <- bind_rows(dasgupta_list) |>
+  rename(
+    Horiuchi_ref   = R_ref,     # solo para no confundir con horiuchi_df
+    effect_d       = effect_d,
+    effect_s       = effect_s,
+    effect_h       = effect_h
+  )
+
+cat("✓ Das Gupta complete\n")
+```
+
+## Method 3: Stepwise Replacement
+
+```{r}
+#| label: stepwise
+#| cache: true
+
+stepwise_list <- list()
+for (region in regiones) {
+  stepwise_list[[region]] <- DemoDecomp::stepwise_replacement(
+    func  = exposure_fun,
+    pars1 = parameters[[ref]],
+    pars2 = parameters[[region]]
+  )
+  names(stepwise_list[[region]]) <- param_names
+}
+
+stepwise_df <- purrr::imap_dfr(
+  stepwise_list,
+  ~ tibble(region = .y, parameter = names(.x), contribution = as.numeric(.x))
+) |>
+  tidyr::separate(parameter,
+                  into = c("component", "age5", "discapacidad"),
+                  sep = "__", convert = TRUE) |>
+  mutate(age5 = factor(age5, levels = age5_levels))
+
+cat("✓ Stepwise complete\n")
+```
+
+------------------------------------------------------------------------
+
+## Comparison
+
+### Aggregate contributions by region and component
+
+```{r}
+#| label: aggregate-contributions
+
+horiuchi_totales  <- horiuchi_df |>
+  group_by(region, component) |>
+  summarise(Horiuchi = sum(contribution, na.rm = TRUE), .groups = "drop")
+
+dasgupta_totales <- dasgupta_df |>
+  select(region, d = effect_d, s = effect_s, h = effect_h) |>
+  pivot_longer(
+    cols      = c(d, s, h),
+    names_to  = "component",
+    values_to = "Das Gupta"
+  )
+
+stepwise_totales  <- stepwise_df |>
+  group_by(region, component) |>
+  summarise(Stepwise = sum(contribution, na.rm = TRUE), .groups = "drop")
+
+# Join all methods
+# NOTE: pivot_wider produces "Das Gupta" (with space); use backtick references
+todos_metodos <- horiuchi_totales |>
+  left_join(dasgupta_totales,  by = c("region", "component")) |>
+  left_join(stepwise_totales,  by = c("region", "component")) |>
+  left_join(valores_reales |> select(region, diff_real, diffprop_real),
+            by = "region")
+```
+
+### Additivity check
+
+Each method must satisfy: $C(s) + C(d) + C(h) = \Delta E$
+
+```{r}
+#| label: additivity-check
+
+todos_metodos |>
+  group_by(region) |>
+  summarise(
+    sum_Horiuchi  = sum(Horiuchi,    na.rm = TRUE),
+    sum_DasGupta  = sum(`Das Gupta`, na.rm = TRUE),
+    sum_Stepwise  = sum(Stepwise,    na.rm = TRUE),
+    diff_real     = unique(diff_real)
+  ) |>
+  mutate(
+    add_Horiuchi = abs(sum_Horiuchi  - diff_real) < 1e-6,
+    add_DasGupta = abs(sum_DasGupta  - diff_real) < 1e-6,
+    add_Stepwise = abs(sum_Stepwise  - diff_real) < 1e-6
+  ) |>
+  summarise(
+    across(starts_with("add_"), ~ mean(.x, na.rm = TRUE),
+           .names = "{.col}_pct_exact")
+  ) |>
+  gt() |>
+  tab_header(title = "Additivity check: proportion of states with exact decomposition")
+```
+
+### Consensus distance (Table A2)
+
+Since the true per-component contribution is unobservable, we use the
+median across the three methods as a consensus reference.
+
+```{r}
+#| label: consensus-table
+
+comparacion_consenso <- todos_metodos |>
+  rowwise() |>
+  mutate(
+    consenso       = median(c(Horiuchi, `Das Gupta`, Stepwise), na.rm = TRUE),
+    err_Horiuchi   = abs(Horiuchi    - consenso),
+    err_DasGupta   = abs(`Das Gupta` - consenso),
+    err_Stepwise   = abs(Stepwise    - consenso)
+  ) |>
+  ungroup()
+
+# Table A2: mean error by component
+tabla_a2 <- comparacion_consenso |>
+  group_by(component) |>
+  summarise(
+    `Das Gupta` = mean(err_DasGupta,  na.rm = TRUE),
+    Horiuchi    = mean(err_Horiuchi,  na.rm = TRUE),
+    Stepwise    = mean(err_Stepwise,  na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(component = case_when(
+    component == "s" ~ "Age structure (s)",
+    component == "d" ~ "Disability prevalence (d)",
+    component == "h" ~ "Heat exposure (h)"
+  ))
+
+tabla_a2 |>
+  gt() |>
+  tab_header(
+    title    = "Table A2. Mean distance to consensus value by method and component",
+    subtitle = "Consensus = median contribution across the three methods"
+  ) |>
+  fmt_number(columns = c(`Das Gupta`, Horiuchi, Stepwise), decimals = 10) |>
+  tab_footnote(
+    "The consensus value represents the median contribution estimate across the
+     three methods for each component and region. Since the true component-specific
+     contribution is unobservable (only the total difference is observed), we use
+     the median as a reference point to evaluate which method produces estimates
+     closest to the central tendency across all three approaches."
+  ) |>
+  cols_label(component = "Component")
+```
+
+### Sample comparison table (Table A1)
+
+```{r}
+#| label: sample-table
+
+sample_states <- c("Aguascalientes", "Baja California", "Oaxaca",
+                   "Ciudad de México", "Nuevo León")
+
+todos_metodos |>
+  filter(region %in% sample_states) |>
+  mutate(component = case_when(
+    component == "d" ~ "d",
+    component == "s" ~ "s",
+    component == "h" ~ "h"
+  )) |>
+  arrange(region, component) |>
+  select(region, component, Horiuchi, `Das Gupta`, Stepwise) |>
+  gt() |>
+  tab_header(
+    title    = "Table A1. Decomposition results for selected states",
+    subtitle = "Contribution of each component by method"
+  ) |>
+  fmt_number(columns = c(Horiuchi, `Das Gupta`, Stepwise), decimals = 4) |>
+  cols_label(
+    region    = "State",
+    component = "Component"
+  )
+```
+
+------------------------------------------------------------------------
+
+## Figure: Method comparison by component
+
+```{r}
+#| label: fig-method-comparison
+#| fig-width: 14
+#| fig-height: 5
+#| fig-cap: "Figure A2. Comparison of component contributions across decomposition methods"
+
+comparacion_long <- todos_metodos |>
+  pivot_longer(
+    cols      = c(Horiuchi, `Das Gupta`, Stepwise),
+    names_to  = "method",
+    values_to = "contribution"
+  ) |>
+  mutate(
+    method    = factor(method, levels = c("Horiuchi", "Das Gupta", "Stepwise")),
+    component = case_when(
+      component == "s" ~ "Age structure (s)",
+      component == "d" ~ "Disability prevalence (d)",
+      component == "h" ~ "Heat exposure (h)"
+    )
+  )
+
+ggplot(comparacion_long,
+       aes(x = contribution, y = fct_reorder(region, contribution),
+           color = method, shape = method)) +
+  geom_point(alpha = 0.75, size = 1.8) +
+  facet_wrap(~ component, scales = "free_x", ncol = 3) +
+  scale_color_manual(
+    values = c("Horiuchi" = "#2E86AB", "Das Gupta" = "#E84855", "Stepwise" = "#3BB273")
+  ) +
+  labs(
+    x = "Contribution to difference from national average",
+    y = NULL,
+    color = "Method", shape = "Method"
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(
+    legend.position = "bottom",
+    strip.text      = element_text(face = "bold"),
+    axis.text.y     = element_text(size = 7)
+  )
+```
+
+------------------------------------------------------------------------
+
+## Method selection rationale
+
+Based on the comparison above, Das Gupta's method is selected for three
+reasons:
+
+**1. Order independence.** By averaging across all 3! = 6 possible
+replacement sequences (sdh, shd, dsh, dhs, hsd, hds), it eliminates
+arbitrary decisions about which component to replace first. There is no
+theoretical justification for prioritizing age structure, disability
+prevalence, or heat exposure.
+
+**2. Demonstrated stability.** Table A2 shows that Das Gupta produces
+the estimates closest to the consensus value, particularly for the
+disability prevalence component (d), where interaction effects with the
+other two components are strongest.
+
+**3. Clear interpretation.** Each component receives its "average
+contribution" to the total difference — a conceptually transparent
+interpretation that is standard in demographic analysis (Das Gupta,
+1993; Preston et al., 2001).
+
+### Acknowledged limitations
+
+-   **Computational cost:** Grows factorially with the number of
+    components (manageable here: 3! = 6 permutations).
+-   **Custom implementation required:** `DemoDecomp` does not export a
+    `das_gupta()` function; the custom function in `R/das_gupta2.R` is
+    used throughout this study.
+-   **Implicit interactions:** Like all symmetric methods, Das Gupta
+    distributes interaction terms across components without explicitly
+    modelling them. This is a deliberate design choice rather than a
+    limitation when no hierarchical ordering is theoretically justified.

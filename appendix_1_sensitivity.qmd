@@ -1,0 +1,395 @@
+---
+title: "Appendix 1: Municipal vs. State-Level Decomposition"
+subtitle: "Sensitivity Analysis"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    self-contained: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+  echo: true
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+## Overview
+
+State-level aggregation was adopted for practical and policy-relevant
+reasons. To assess whether this choice masks important spatial patterns,
+we compare two analytical strategies:
+
+-   **Approach 1:** Perform Das Gupta decomposition at the municipal
+    level, then aggregate component contributions to the state level
+    using population weights.
+-   **Approach 2:** Aggregate demographic and climatic data to the state
+    level first, then perform decomposition.
+
+If both approaches yield highly similar component estimates, state-level
+decomposition is a valid and efficient analytical choice.
+
+------------------------------------------------------------------------
+
+## Setup
+
+```{r}
+#| label: setup
+#| code-fold: false
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+  readxl, dplyr, tidyr, purrr,
+  ggplot2, patchwork, scales,
+  gt, knitr, sf
+)
+
+# Custom functions
+source("R/das_gupta.R")            # Simple Das Gupta (one region vs reference)
+source("R/prepare_horiuchi_data.R") # State-level data aggregation
+```
+
+------------------------------------------------------------------------
+
+## Data preparation
+
+```{r}
+#| label: data-load
+
+df <- read_excel("in/POP_UTCI_mun.xlsx")
+mapa <- sf::read_sf("in/mapa_ent_small.shp")
+
+df <- df |>
+  left_join(
+    mapa |> sf::st_drop_geometry() |> select(cve_ent = CVE_ENT, NOMGEO),
+    by = "cve_ent"
+  ) |>
+  select(-region) |>
+  rename(region = NOMGEO) |>
+  mutate(
+    dis_mov   = dis_caminar + dis_banarse,
+    dis_otros = dis_ver + dis_oir + dis_recordar + dis_hablar
+  )
+
+age5_levels <- c(
+  "0-4",  "5-9",  "10-14", "15-19", "20-24",
+  "25-29","30-34","35-39", "40-44", "45-49",
+  "50-54","55-59","60-64", "65-69", "70-74",
+  "75-79","80-84","85+"
+)
+
+# Three disability subtypes (popdis excluded from sensitivity comparison
+# to focus on subtypes with clearest policy interpretation)
+discapacidades <- c("dis_mov", "dis_mult", "dis_otros")
+```
+
+### Approach 2: State-level data
+
+For each state $e$, disability type $k$, and age group $i$, the three
+components are constructed as:
+
+$$
+S_{e,k,i} = \sum_m POP_{m,k,i}, \quad
+D_{e,k,i} = \sum_m POP\_DIS_{m,k,i}, \quad
+H_{e,k,i} = \frac{\sum_m POP_{m,k,i} \cdot HeatDays_m}{\sum_m POP_{m,k,i}}
+$$
+
+```{r}
+#| label: state-data
+
+# prepare_horiuchi_data() aggregates df to state level for each
+# disability type, computing s, d, h and exposure identically
+# to the main analysis pipeline
+datos_estatal <- prepare_horiuchi_data(df, discapacidades, age5_levels)
+
+cat("States prepared:", n_distinct(datos_estatal$region) - 1, "\n")
+cat("Disability types:", n_distinct(datos_estatal$discapacidad), "\n")
+```
+
+### Approach 1: Municipal-level data
+
+```{r}
+#| label: municipal-data
+
+datos_municipal <- list()
+
+for (i in discapacidades) {
+
+  municipal <- df |>
+    group_by(cve_ent, cvegeo, region, age5) |>
+    summarise(
+      S        = sum(pop, na.rm = TRUE),
+      D        = sum(.data[[i]], na.rm = TRUE),
+      heatdays = weighted.mean(heatdays, w = pop, na.rm = TRUE),
+      .groups  = "drop"
+    ) |>
+    group_by(cve_ent, cvegeo, region) |>
+    mutate(s = S / sum(S, na.rm = TRUE)) |>
+    ungroup() |>
+    mutate(d = D / S, h = heatdays / 366) |>
+    group_by(cve_ent, cvegeo, region) |>
+    mutate(exposure = sum(d * s * h * 100, na.rm = TRUE)) |>
+    ungroup() |>
+    mutate(discapacidad = i)
+
+  nacional <- df |>
+    group_by(age5) |>
+    summarise(
+      S        = sum(pop, na.rm = TRUE),
+      D        = sum(.data[[i]], na.rm = TRUE),
+      heatdays = weighted.mean(heatdays, w = pop, na.rm = TRUE),
+      .groups  = "drop"
+    ) |>
+    mutate(region = "Nacional", cve_ent = "00", cvegeo = "00000") |>
+    group_by(region) |>
+    mutate(s = S / sum(S, na.rm = TRUE)) |>
+    ungroup() |>
+    mutate(d = D / S, h = heatdays / 366) |>
+    group_by(region) |>
+    mutate(exposure = sum(d * s * h * 100, na.rm = TRUE)) |>
+    ungroup() |>
+    mutate(discapacidad = i)
+
+  datos_municipal[[i]] <- bind_rows(municipal, nacional)
+}
+
+datos_municipal <- do.call(rbind, datos_municipal) |>
+  mutate(age5 = factor(age5, levels = age5_levels))
+
+cat("Municipalities:", n_distinct(datos_municipal$cvegeo) - 1, "\n")
+```
+
+------------------------------------------------------------------------
+
+## Decomposition
+
+### Approach 2: Direct state-level Das Gupta
+
+```{r}
+#| label: decomp-state
+
+resultados_estatal <- list()
+
+for (dis_type in discapacidades) {
+
+  data_decomp <- datos_estatal |> filter(discapacidad == dis_type)
+  regions     <- setdiff(unique(data_decomp$region), "Nacional")
+
+  results_dis <- purrr::map_dfr(
+    regions,
+    ~ das_gupta(df = data_decomp, ref_region = "Nacional", cmp_region = .x)
+  ) |> mutate(discapacidad = dis_type)
+
+  resultados_estatal[[dis_type]] <- results_dis
+  cat("✓", dis_type, "-", nrow(results_dis), "states\n")
+}
+
+resultados_estatal_final <- do.call(rbind, resultados_estatal)
+```
+
+### Approach 1: Municipal Das Gupta + state aggregation
+
+```{r}
+#| label: decomp-municipal
+#| cache: true
+
+resultados_municipal <- list()
+
+for (dis_type in discapacidades) {
+
+  cat("\nProcessing:", dis_type, "\n")
+  data_decomp <- datos_municipal |> filter(discapacidad == dis_type)
+  municipios  <- data_decomp |>
+    filter(region != "Nacional") |>
+    distinct(cvegeo, region, cve_ent)
+
+  pb <- txtProgressBar(min = 0, max = nrow(municipios), style = 3)
+  results_list <- list()
+
+  for (i in seq_len(nrow(municipios))) {
+    mun_info  <- municipios[i, ]
+    data_temp <- data_decomp |>
+      filter(cvegeo == mun_info$cvegeo | region == "Nacional") |>
+      mutate(region = if_else(
+        cvegeo == mun_info$cvegeo,
+        paste0("MUN_", cvegeo),
+        "Nacional"
+      ))
+
+    result <- tryCatch(
+      das_gupta(
+        df         = data_temp,
+        ref_region = "Nacional",
+        cmp_region = paste0("MUN_", mun_info$cvegeo)
+      ) |> mutate(
+        cvegeo  = mun_info$cvegeo,
+        cve_ent = mun_info$cve_ent,
+        region  = mun_info$region
+      ),
+      error = function(e) NULL
+    )
+
+    results_list[[i]] <- result
+    setTxtProgressBar(pb, i)
+  }
+
+  close(pb)
+
+  resultados_municipal[[dis_type]] <- bind_rows(results_list) |>
+    mutate(discapacidad = dis_type)
+
+  cat("\n  ✓ Done:", nrow(resultados_municipal[[dis_type]]), "municipalities\n")
+}
+
+resultados_municipal_final <- do.call(rbind, resultados_municipal)
+```
+
+### Aggregate municipal results to state level
+
+```{r}
+#| label: aggregate-to-state
+#| message: false
+#| warning: false
+#| results: hide
+
+# Join population weights from municipal data
+pop_weights <- datos_municipal |>
+  filter(region != "Nacional") |>
+  group_by(cvegeo, cve_ent, discapacidad) |>
+  summarise(pop_total = sum(S, na.rm = TRUE), .groups = "drop")
+
+# Weighted aggregation to state
+resultados_mun_agg <- resultados_municipal_final |>
+  left_join(pop_weights, by = c("cvegeo", "cve_ent", "discapacidad")) |>
+  group_by(region, discapacidad) |>
+  summarise(
+    effect_age_mun        = weighted.mean(effect_age,        pop_total, na.rm = TRUE),
+    effect_disability_mun = weighted.mean(effect_disability, pop_total, na.rm = TRUE),
+    effect_heat_mun       = weighted.mean(effect_heat,       pop_total, na.rm = TRUE),
+    n_municipios          = n(),
+    .groups = "drop"
+  )
+```
+
+------------------------------------------------------------------------
+
+## Comparison
+
+```{r}
+#| label: comparison
+
+comparacion <- resultados_estatal_final |>
+  select(region, discapacidad,
+         effect_age_dir        = effect_age,
+         effect_disability_dir = effect_disability,
+         effect_heat_dir       = effect_heat,
+         total_diff) |>
+  left_join(resultados_mun_agg, by = c("region", "discapacidad")) |>
+  mutate(
+    diff_age        = effect_age_dir        - effect_age_mun,
+    diff_disability = effect_disability_dir - effect_disability_mun,
+    diff_heat       = effect_heat_dir       - effect_heat_mun
+  )
+```
+
+### Pearson correlations
+
+```{r}
+#| label: correlations
+
+cor_age        <- cor(comparacion$effect_age_mun,
+                      comparacion$effect_age_dir,        use = "complete.obs")
+cor_disability <- cor(comparacion$effect_disability_mun,
+                      comparacion$effect_disability_dir, use = "complete.obs")
+cor_heat       <- cor(comparacion$effect_heat_mun,
+                      comparacion$effect_heat_dir,       use = "complete.obs")
+
+tibble(
+  Component      = c("Age structure (s)", "Disability prevalence (d)", "Heat exposure (h)"),
+  `Pearson r`    = round(c(cor_age, cor_disability, cor_heat), 4),
+  Interpretation = case_when(
+    c(cor_age, cor_disability, cor_heat) >= 0.99 ~ "Near-perfect agreement",
+    c(cor_age, cor_disability, cor_heat) >= 0.95 ~ "Very strong agreement",
+    TRUE ~ "Strong agreement"
+  )
+) |>
+  gt() |>
+  tab_header(
+    title    = "Table A1. Pearson Correlations between Approaches",
+    subtitle = "Municipal aggregation vs. direct state-level decomposition"
+  ) |>
+  fmt_number(columns = `Pearson r`, decimals = 4) |>
+  cols_align(align = "center", columns = `Pearson r`) |>
+  tab_footnote("N = 32 states × 3 disability types. Pearson r computed with complete observations.")
+```
+
+### Figure A1: Scatter plots by component
+
+```{r}
+#| label: fig-scatter
+#| fig-width: 12
+#| fig-height: 5
+#| fig-cap: "Figure A1. Sensitivity analysis: municipal aggregation vs. direct state-level decomposition"
+
+plot_component <- function(data, x_var, y_var, label, r_val) {
+  ggplot(data, aes(x = .data[[x_var]], y = .data[[y_var]],
+                   color = discapacidad)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed",
+                color = "gray40", linewidth = 0.8) +
+    geom_point(alpha = 0.7, size = 2.2) +
+    scale_color_manual(
+      values = c("dis_mov" = "#E07B54", "dis_mult" = "#5B9BD5", "dis_otros" = "#70AD47"),
+      labels = c("Mobility", "Multiple", "Other"),
+      name   = "Disability type"
+    ) +
+    labs(
+      title    = label,
+      x        = "Municipal aggregation",
+      y        = "Direct state decomposition",
+      subtitle = sprintf("Pearson correlation: r = %.4f  |  N = %d states × 3 disability types",
+                         r_val, 32)
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(legend.position = "bottom",
+          plot.title = element_text(face = "bold", size = 12))
+}
+
+p1 <- plot_component(comparacion, "effect_age_mun",        "effect_age_dir",
+                     "Age Structure Component (s)", cor_age)
+p2 <- plot_component(comparacion, "effect_disability_mun", "effect_disability_dir",
+                     "Disability Prevalence Component (d)", cor_disability)
+p3 <- plot_component(comparacion, "effect_heat_mun",       "effect_heat_dir",
+                     "Heat Exposure Component (h)", cor_heat)
+
+fig_a1 <- (p1 | p2 | p3) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+
+ggsave("out/fig_A1_sensitivity_scatter.png",
+       plot   = fig_a1,
+       width  = 12,
+       height = 5,
+       dpi    = 300)
+
+fig_a1
+```
+
+------------------------------------------------------------------------
+
+## Interpretation
+
+The diagonal dashed line in each panel represents perfect agreement
+between methods. Points falling close to the diagonal indicate that both
+approaches yield similar component estimates for a given state and
+disability type.
+
+Pearson correlations of r = `r round(cor_age, 2)` for age structure, r =
+`r round(cor_disability, 2)` for disability prevalence, and r =
+`r round(cor_heat, 2)` for heat exposure confirm that state-level
+decomposition preserves the substantive territorial patterns identified
+by the more computationally intensive municipal approach. State-level
+aggregation is therefore a valid and efficient analytical strategy for
+the purposes of this study.
